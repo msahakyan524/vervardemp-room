@@ -840,75 +840,186 @@ function person(g, x, y, s, hair, skin, cloth, longHair) {
 const JP = '"Noto Sans JP", "Hiragino Sans", sans-serif';
 const SERIF = 'Georgia, "Times New Roman", serif';
 
-function mangaCover(c) {
-  return (g, w, h) => {
-    const sky = g.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, hex(c.bg1));
-    sky.addColorStop(1, hex(c.bg2));
-    g.fillStyle = sky;
-    g.fillRect(0, 0, w, h);
-
-    if (c.motif === 'citrus') {
-      g.fillStyle = 'rgba(255,255,255,0.30)';
-      [[70, 90, 46], [330, 150, 34], [60, 470, 38], [345, 430, 28]].forEach(([x, y, r]) => {
-        g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-      });
-    } else if (c.motif === 'flowers') {
-      [[46, 120], [356, 200], [40, 380], [360, 470], [80, 520]].forEach(([x, y], i) => {
-        g.fillStyle = i % 2 ? '#7a5fc0' : '#5f8fd0';
-        for (let k = 0; k < 5; k++) {
-          const a = (k / 5) * Math.PI * 2;
-          g.beginPath();
-          g.ellipse(x + Math.cos(a) * 12, y + Math.sin(a) * 12, 9, 9, 0, 0, 7);
-          g.fill();
-        }
-        g.fillStyle = '#f4e9a8';
-        g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill();
-      });
-    } else if (c.motif === 'grass') {
-      g.fillStyle = hex(c.accent);
-      g.beginPath();
-      g.moveTo(0, h);
-      g.lineTo(0, h - 120);
-      for (let x = 0; x <= w; x += 20) g.lineTo(x, h - 120 + Math.sin(x / 30) * 22);
-      g.lineTo(w, h);
-      g.fill();
-    } else if (c.motif === 'doorway') {
-      g.fillStyle = 'rgba(255,255,255,0.85)';
-      g.fillRect(w / 2 - 44, h / 2 - 40, 88, 150);
-      g.fillStyle = hex(c.bg2);
-      g.fillRect(w / 2 - 34, h / 2 - 28, 68, 138);
-    }
-
-    person(g, w * 0.36, h * 0.44, 1.5, hex(c.hairA), '#f6ddcd', hex(c.clothA), true);
-    person(g, w * 0.64, h * 0.50, 1.4, hex(c.hairB), '#f8e2d4', hex(c.clothB), c.shortB !== true);
-
-    g.fillStyle = hex(c.ink);
-    if (c.titlePos === 'band') {
-      g.fillStyle = 'rgba(255,255,255,0.92)';
-      g.fillRect(0, h - 112, w, 74);
-      g.fillStyle = hex(c.ink);
-      centred(g, c.title, w / 2, h - 62, w - 40, 46, JP);
-    } else if (c.titlePos === 'big') {
-      centred(g, c.title, w / 2, h - 76, w - 40, 84, 'Georgia, serif');
-    } else if (c.titlePos === 'v-left' || c.titlePos === 'v-right') {
-      const x = c.titlePos === 'v-left' ? 40 : w - 40;
-      g.save();
-      g.translate(x, 60);
-      g.font = `40px ${JP}`;
-      g.textAlign = 'center';
-      [...c.title].forEach((ch, i) => g.fillText(ch, 0, i * 44));
-      g.restore();
-    } else {
-      centred(g, c.title, w / 2, 66, w - 40, 44, JP);
-    }
-
-    g.fillStyle = hex(c.ink);
-    g.font = `20px Inter, sans-serif`;
-    g.textAlign = 'center';
-    g.fillText(c.author, w / 2, h - 18);
-  };
+function vTitle(g, text, x, yTop, size, colour) {
+  g.fillStyle = colour;
+  g.font = `${size}px ${JP}`;
+  g.textAlign = 'center';
+  [...text].forEach((ch, i) => g.fillText(ch, x, yTop + i * size * 1.08));
 }
+
+function credit(g, text, x, y, colour, size) {
+  g.fillStyle = colour;
+  g.font = `${size || 17}px Inter, ${JP}`;
+  g.textAlign = 'center';
+  g.fillText(text, x, y);
+}
+
+/* Each of these is its own layout — one big figure, a cropped pair, a
+   landscape with tiny figures — because that is what actually tells the
+   covers apart. */
+
+// pale blue, one figure, title running down a white band on the left
+const coverBloom = (g, w, h) => {
+  g.fillStyle = '#f4f8fb';
+  g.fillRect(0, 0, w, h);
+  const sky = g.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#cbe0f2');
+  sky.addColorStop(1, '#f0f6fb');
+  g.fillStyle = sky;
+  g.fillRect(96, 0, w - 96, h);
+  g.fillStyle = '#b7cad9';
+  g.fillRect(96, h * 0.70, w - 96, 5);
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  g.fillRect(96, h * 0.70 + 5, w - 96, h * 0.30);
+  person(g, w * 0.60, h * 0.40, 2.5, '#3b3a46', '#f8e2d2', '#2f3d5c', true);
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 96, h);
+  vTitle(g, 'やがて君になる', 48, 76, 36, '#c0392f');
+  credit(g, '仲谷 鳰', 48, h - 34, '#93a2ad', 16);
+};
+
+// flat citrus colours, two heads cropped large, lowercase title low left
+const coverCitrus = (g, w, h) => {
+  const bg = g.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, '#ffd451');
+  bg.addColorStop(1, '#f3832c');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(255,255,255,0.26)';
+  [[58, 74, 62], [352, 172, 46], [64, 466, 54], [344, 498, 38]].forEach(([x, y, r]) => {
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  });
+  person(g, w * 0.33, h * 0.36, 3.1, '#e2ab45', '#fce6d4', '#f8f5ef', true);
+  person(g, w * 0.68, h * 0.43, 3.1, '#2f2f3a', '#fae7db', '#3c4a63', true);
+  g.fillStyle = '#ffffff';
+  g.textAlign = 'left';
+  g.font = 'bold 96px Georgia, serif';
+  g.fillText('citrus', 32, h - 62);
+  g.font = `20px Inter, ${JP}`;
+  g.fillText('サブロウタ', 36, h - 28);
+};
+
+// washed green, one small figure, a lot of empty paper
+const coverSasameki = (g, w, h) => {
+  g.fillStyle = '#eef4e7';
+  g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#aac79b';
+  g.lineWidth = 2;
+  g.strokeRect(22, 22, w - 44, h - 44);
+  g.fillStyle = 'rgba(170,199,155,0.28)';
+  g.beginPath(); g.ellipse(w * 0.72, h * 0.70, 130, 96, 0, 0, 7); g.fill();
+  person(g, w * 0.70, h * 0.62, 1.5, '#2e2b33', '#f8e3d3', '#6f8a9c', false);
+  g.fillStyle = '#3f6539';
+  g.textAlign = 'left';
+  g.font = `46px ${JP}`;
+  g.fillText('ささめきこと', 44, 112);
+  credit(g, '池田 恵理子', 44, 148, '#7d9a74', 18);
+  g.textAlign = 'left';
+};
+
+// cream, a rose oval with the pair inside it, title in a band beneath
+const coverGirlFriends = (g, w, h) => {
+  g.fillStyle = '#fbf3ef';
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = '#f7ced9';
+  g.beginPath(); g.ellipse(w / 2, h * 0.40, w * 0.40, h * 0.30, 0, 0, 7); g.fill();
+  g.save();
+  g.beginPath(); g.ellipse(w / 2, h * 0.40, w * 0.40, h * 0.30, 0, 0, 7); g.clip();
+  person(g, w * 0.39, h * 0.34, 2.1, '#6b4a38', '#fae3d3', '#e9e0e7', true);
+  person(g, w * 0.63, h * 0.38, 2.1, '#2c2833', '#fce7d9', '#d4c4d5', true);
+  g.restore();
+  g.strokeStyle = '#cc6a89';
+  g.lineWidth = 3;
+  g.beginPath(); g.ellipse(w / 2, h * 0.40, w * 0.40, h * 0.30, 0, 0, 7); g.stroke();
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, h - 126, w, 76);
+  g.fillStyle = '#c25878';
+  centred(g, 'GIRL FRIENDS', w / 2, h - 76, w - 56, 46, 'Georgia, serif');
+  credit(g, '森永 みるく', w / 2, h - 26, '#bb8b9c');
+};
+
+// a scene: sky, grass, morning glories up both edges, small figures
+const coverKase = (g, w, h) => {
+  const sky = g.createLinearGradient(0, 0, 0, h * 0.72);
+  sky.addColorStop(0, '#a4dbf2');
+  sky.addColorStop(1, '#e8f7f4');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = '#77b45b';
+  g.beginPath();
+  g.moveTo(0, h);
+  g.lineTo(0, h * 0.66);
+  for (let x = 0; x <= w; x += 18) g.lineTo(x, h * 0.66 + Math.sin(x / 34) * 14);
+  g.lineTo(w, h);
+  g.fill();
+  g.strokeStyle = '#8b9c6b';
+  g.lineWidth = 4;
+  [30, w - 30].forEach((x) => { g.beginPath(); g.moveTo(x, 36); g.lineTo(x, h * 0.72); g.stroke(); });
+  [[30, 118], [30, 296], [30, 462], [w - 30, 176], [w - 30, 352], [w - 30, 508]].forEach(([x, y], i) => {
+    g.fillStyle = i % 2 ? '#7a5fc0' : '#5f8fd0';
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      g.beginPath(); g.ellipse(x + Math.cos(a) * 13, y + Math.sin(a) * 13, 10, 10, 0, 0, 7); g.fill();
+    }
+    g.fillStyle = '#f6eeae';
+    g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill();
+  });
+  person(g, w * 0.39, h * 0.42, 1.6, '#3a3340', '#f9e3d3', '#6f9f5c', true);
+  person(g, w * 0.61, h * 0.45, 1.5, '#8a5f3c', '#fbe7d7', '#ebe6da', false);
+  g.fillStyle = 'rgba(255,255,255,0.94)';
+  g.fillRect(w * 0.15, h - 120, w * 0.70, 68);
+  g.fillStyle = '#2f6f7a';
+  centred(g, '加瀬さん', w / 2, h - 72, w * 0.6, 48, JP);
+  credit(g, '高嶋 ひろみ', w / 2, h - 26, '#5f8f96');
+};
+
+// watercolour wash, a big soft flower, the pair barely more than shapes
+const coverAoi = (g, w, h) => {
+  const wash = g.createLinearGradient(0, 0, w, h);
+  wash.addColorStop(0, '#e9e6f6');
+  wash.addColorStop(0.6, '#dfe7f4');
+  wash.addColorStop(1, '#f5f2f9');
+  g.fillStyle = wash;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(138,148,208,0.28)';
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * Math.PI * 2 - 0.4;
+    g.beginPath();
+    g.ellipse(w * 0.33 + Math.cos(a) * 76, h * 0.38 + Math.sin(a) * 76, 58, 58, 0, 0, 7);
+    g.fill();
+  }
+  g.fillStyle = 'rgba(238,234,178,0.55)';
+  g.beginPath(); g.arc(w * 0.33, h * 0.38, 32, 0, 7); g.fill();
+  person(g, w * 0.45, h * 0.50, 1.8, '#8f8aa8', '#f2e9e5', '#aab0cc', true);
+  person(g, w * 0.64, h * 0.55, 1.7, '#a09ab4', '#f4ece8', '#bcc1d8', true);
+  vTitle(g, '青い花', w - 54, 70, 42, '#5b52a0');
+  credit(g, '志村 貴子', w - 54, h - 40, '#7a73ad', 16);
+};
+
+// wide dusk landscape, a doorway on its own, figures almost too small to see
+const coverOtherside = (g, w, h) => {
+  const sky = g.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#1b3444');
+  sky.addColorStop(0.55, '#4e7e8b');
+  sky.addColorStop(1, '#c6d8ca');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = '#7f9a72';
+  g.fillRect(0, h * 0.64, w, h * 0.36);
+  g.fillStyle = '#6a8a5f';
+  for (let x = 0; x < w; x += 26) g.fillRect(x, h * 0.64 + ((x / 26) % 3) * 12, 14, 4);
+  g.fillStyle = '#e9ede9';
+  g.fillRect(w / 2 - 54, h * 0.32, 108, 196);
+  g.fillStyle = '#15232d';
+  g.fillRect(w / 2 - 42, h * 0.34, 84, 176);
+  person(g, w * 0.28, h * 0.58, 0.8, '#1f2933', '#e9d7c9', '#2c3a47', true);
+  person(g, w * 0.37, h * 0.60, 0.76, '#c8b08a', '#eddccd', '#51606d', true);
+  g.fillStyle = '#0f191f';
+  g.fillRect(24, 26, w - 48, 64);
+  g.fillStyle = '#eaf0f2';
+  centred(g, '裏世界ピクニック', w / 2, 70, w - 74, 38, JP);
+  credit(g, '宮澤 伊織', w / 2, h - 22, '#cfe0e2', 16);
+};
 
 /* Soviet textbooks are plain typography, so these get genuinely close */
 function sovietCover(c) {
@@ -940,51 +1051,37 @@ const BOOKS = [
   { spine: 'やがて君になる', title: 'Yagate Kimi ni Naru',
     note: 'Bloom Into You — Nakatani Nio. Pale blue, two girls on a station platform, title running down the left.',
     base: 0xe4edf7, ink: 0xc0392f,
-    cover: mangaCover({ bg1: 0xdce9f7, bg2: 0xf4f7fa, accent: 0x8fb6dd, ink: 0xc0392f,
-      hairA: 0x3b3a46, hairB: 0x8d6a4a, clothA: 0x2f3d5c, clothB: 0x394a6b,
-      title: 'やがて君になる', author: 'Nakatani Nio', titlePos: 'v-left' }) },
+    cover: coverBloom },
 
   { spine: 'citrus', title: 'citrus',
     note: 'Saburouta. Loud lemon-and-orange cover, the title in plain lowercase across the bottom.',
     base: 0xf7dca6, ink: 0xd97a2b,
-    cover: mangaCover({ bg1: 0xf6c64a, bg2: 0xf2903c, accent: 0xffffff, ink: 0xffffff,
-      hairA: 0xd9a13f, hairB: 0x2f2f3a, clothA: 0xf7f4ee, clothB: 0x3c4a63,
-      title: 'citrus', author: 'Saburouta', titlePos: 'big', motif: 'citrus' }) },
+    cover: coverCitrus },
 
   { spine: 'ささめきこと', title: 'Sasameki Koto',
     note: 'Whispered Words — Ikeda Takashi. Washed pale green with hand-lettered title across the top.',
     base: 0xe2eddd, ink: 0x4b7a3f,
-    cover: mangaCover({ bg1: 0xdcecd6, bg2: 0xf2f6ec, accent: 0x8fbb7c, ink: 0x40663a,
-      hairA: 0x2e2b33, hairB: 0x6b5140, clothA: 0x53707f, clothB: 0x7d8f9c,
-      title: 'ささめきこと', author: 'Ikeda Takashi', titlePos: 'top', shortB: true }) },
+    cover: coverSasameki },
 
   { spine: 'GIRL FRIENDS', title: 'GIRL FRIENDS',
     note: 'Morinaga Milk. Cream and rose, the two of them close together, title in a white band at the foot.',
     base: 0xf8dde5, ink: 0xcc6a89,
-    cover: mangaCover({ bg1: 0xfbe4ea, bg2: 0xf6cdd9, accent: 0xffffff, ink: 0xc25878,
-      hairA: 0x6b4a38, hairB: 0x2c2833, clothA: 0xe8dfe6, clothB: 0xd3c3d4,
-      title: 'GIRL FRIENDS', author: 'Morinaga Milk', titlePos: 'band' }) },
+    cover: coverGirlFriends },
 
   { spine: '加瀬さん', title: 'Kase-san',
     note: 'Takashima Hiromi. Sky blue with morning glories climbing all over the border.',
     base: 0xdcefef, ink: 0x3f8a8a,
-    cover: mangaCover({ bg1: 0xcbe9f2, bg2: 0xeef8f6, accent: 0x5fa3a3, ink: 0x2f6f7a,
-      hairA: 0x3a3340, hairB: 0x8a5f3c, clothA: 0x6f9f5c, clothB: 0xe9e4d8,
-      title: '加瀬さん', author: 'Takashima Hiromi', titlePos: 'band', motif: 'flowers' }) },
+    cover: coverKase },
 
   { spine: '青い花', title: 'Aoi Hana',
     note: 'Sweet Blue Flowers — Shimura Takako. Soft washed lilac and blue, title running down the right.',
     base: 0xe5e1f2, ink: 0x6c62b0,
-    cover: mangaCover({ bg1: 0xdfe0f4, bg2: 0xf1eef8, accent: 0x8b83c4, ink: 0x5b52a0,
-      hairA: 0x2f2c3a, hairB: 0x4a3f52, clothA: 0x3f4a72, clothB: 0x59628a,
-      title: '青い花', author: 'Shimura Takako', titlePos: 'v-right' }) },
+    cover: coverAoi },
 
   { spine: '裏世界ピクニック', title: 'Urasekai Picnic',
     note: 'Otherside Picnic. Cold teal, a doorway standing on its own in an empty field.',
     base: 0xd5dee6, ink: 0x2e4759,
-    cover: mangaCover({ bg1: 0x395d70, bg2: 0xa9c6cc, accent: 0x6f8f7a, ink: 0xf0f4f6,
-      hairA: 0x1f2933, hairB: 0xc8b08a, clothA: 0x2c3a47, clothB: 0x51606d,
-      title: '裏世界ピクニック', author: 'Miyazawa Iori', titlePos: 'top', motif: 'doorway' }) },
+    cover: coverOtherside },
 
   { spine: 'ЛАНДАУ', title: 'Ландау и Лифшиц',
     note: 'Теоретическая физика. Тёмно-синий переплёт, золотое тиснение, тома в ряд.',
@@ -1858,6 +1955,7 @@ renderer.setAnimationLoop(() => {
 
 /* exposed so the scene can be checked headlessly */
 export const __test = { scene, camera, controls, items, fixtures, ROOM, axesGroup, hotspots,
+  BOOKS,
   audioNotes: () => (audioCtx ? audioCtx.made || 0 : 0), select, zoomToItem, saveLayout, setNight, wallDecor, hideNearWallDecor };
 
 /* fade the loader once the first frame is on screen */
