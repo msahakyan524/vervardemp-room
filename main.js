@@ -16,7 +16,7 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 11;
+const LAYOUT_VERSION = 12;
 
 const C = {
   wall: 0xf4ecdf,
@@ -133,6 +133,16 @@ function onWall(obj, normal, planePoint) {
   scene.add(obj);
   return obj;
 }
+
+/* A hotspot is a small detail you can tap for its own card — a single
+   book, the laptop screen, a socket. Ones that aren't inside a piece of
+   furniture get registered so the tap test can find them. */
+const hotspots = [];
+function hotspot(obj, title, body, onOpen) {
+  obj.userData.hotspot = { title, body, onOpen };
+  return obj;
+}
+function tappable(obj) { hotspots.push(obj); return obj; }
 
 /* Fixtures are part of the room — you can tap them, but not drag them. */
 const fixtures = [];
@@ -318,6 +328,8 @@ const switchPlate = new THREE.Group();
     switchPlate.add(pin);
   });
 }
+hotspot(switchPlate, 'Switch and socket', 'フォーク ちょだい〜　ｗｗｗ');
+tappable(switchPlate);
 switchPlate.name = 'switch';
 onWall(switchPlate, N_SOUTH, new THREE.Vector3(0, 0, HD));
 fixture(doorGroup, 'Door', 'The way in. Straight ahead of you is the bookshelf, the built-in closet is on your right.');
@@ -382,6 +394,8 @@ const bedSocket = new THREE.Group();
     bedSocket.add(hole);
   });
 }
+hotspot(bedSocket, 'Socket', 'フォーク ちょだい〜　ｗｗｗ');
+tappable(bedSocket);
 onWall(bedSocket, N_EAST, new THREE.Vector3(HW, 0, 0));
 
 /* ------------------------------------------------------------------
@@ -399,6 +413,8 @@ function poster(draw, w, h, x, y, z, normal, res = 240) {
   if (normal === N_EAST) m.rotation.y = -Math.PI / 2;
   else if (normal === N_WEST) m.rotation.y = Math.PI / 2;
   else if (normal === N_SOUTH) m.rotation.y = Math.PI;
+  hotspot(m, 'Poster', "you wouldn't understand it anyway");
+  tappable(m);
   onWall(m, normal);
   return m;
 }
@@ -598,6 +614,171 @@ function buildBed() {
   return g;
 }
 
+/* ------------------------------------------------------------------
+   The laptop screen, and the music it plays.
+------------------------------------------------------------------ */
+function screenTex(draw) {
+  const c = document.createElement('canvas');
+  c.width = 384;
+  c.height = 264;
+  draw(c.getContext('2d'), 384, 264);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const SCREEN_CODE = screenTex((g, w, h) => {
+  g.fillStyle = '#16202b';
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = '#22303f';
+  g.fillRect(0, 0, w, 18);
+  const cols = ['#7fd6c0', '#c9a2e8', '#e0c979', '#8fb8e8', '#6f8496'];
+  for (let i = 0; i < 16; i++) {
+    g.fillStyle = cols[i % cols.length];
+    g.fillRect(16, 32 + i * 13, 40 + ((i * 53) % 190), 5);
+  }
+});
+
+/* Title screen of the visual novel: a wide summer sky, the way it looks
+   before you touch anything. Drawn from scratch, not the real artwork. */
+const SCREEN_VN = screenTex((g, w, h) => {
+  const sky = g.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#3f7fd4');
+  sky.addColorStop(0.55, '#9fd0f2');
+  sky.addColorStop(1, '#eaf4e2');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(255,255,255,0.92)';
+  [[70, 70, 34], [110, 62, 24], [250, 52, 30], [292, 60, 20], [180, 96, 18]].forEach(([x, y, r]) => {
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  });
+  g.fillStyle = '#7fae5e';
+  g.beginPath();
+  g.moveTo(0, h);
+  g.lineTo(0, h - 34);
+  for (let x = 0; x <= w; x += 16) g.lineTo(x, h - 34 + Math.sin(x / 22) * 7);
+  g.lineTo(w, h);
+  g.fill();
+  g.fillStyle = '#1d2b3f';
+  g.font = 'bold 34px "Noto Sans JP", "Hiragino Sans", sans-serif';
+  g.textAlign = 'center';
+  g.fillText('素晴らしき日々', w / 2, h / 2 - 4);
+  g.font = '15px Inter, sans-serif';
+  g.fillStyle = '#2f4560';
+  g.fillText('Subarashiki Hibi', w / 2, h / 2 + 22);
+  g.font = '12px Inter, sans-serif';
+  g.fillText('start    continue    extra', w / 2, h - 48);
+});
+
+/* Bach, BWV 147 — the chorale everyone knows as Jesu, Joy of Man's
+   Desiring. Long out of copyright, so rather than ship an audio file we
+   just play the notes with the browser's own sound generator. */
+const NOTE = {
+  G4: 392.00, A4: 440.00, B4: 493.88, C5: 523.25, D5: 587.33,
+  E5: 659.25, Fs5: 739.99, G5: 783.99, A5: 880.00,
+};
+const CHORALE = ('G4 A4 B4 D5 C5 B4 G4 A4 B4 A4 G4 A4 B4 D5 G5 Fs5 E5 D5 '
+  + 'E5 Fs5 D5 E5 Fs5 G5 A5 G5 Fs5 E5 D5 C5 B4 C5 D5 E5 D5 C5 B4 A4 G4').split(' ');
+
+let audioCtx = null;
+let stopMusic = null;
+
+function playChorale() {
+  if (stopMusic) stopMusic();
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  const ctx = audioCtx;
+  if (ctx.state === 'suspended') ctx.resume();
+
+  const master = ctx.createGain();
+  master.gain.value = 0.14;
+  master.connect(ctx.destination);
+
+  const beat = 0.34;
+  const t0 = ctx.currentTime + 0.08;
+  const started = [];
+  CHORALE.forEach((n, i) => {
+    const f = NOTE[n];
+    if (!f) return;
+    [[f, 0.9, 'triangle'], [f / 2, 0.3, 'sine']].forEach(([freq, level, type]) => {
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      const at = t0 + i * beat;
+      env.gain.setValueAtTime(0.0001, at);
+      env.gain.linearRampToValueAtTime(level, at + 0.05);
+      env.gain.exponentialRampToValueAtTime(0.0001, at + beat * 1.4);
+      osc.connect(env);
+      env.connect(master);
+      osc.start(at);
+      osc.stop(at + beat * 1.5);
+      started.push(osc);
+    });
+  });
+
+  stopMusic = () => {
+    started.forEach((o) => { try { o.stop(); } catch (_) {} });
+    try { master.disconnect(); } catch (_) {}
+    stopMusic = null;
+  };
+  return CHORALE.length * beat;
+}
+
+/* Book spines, printed with the title. Colours follow each cover's
+   palette rather than copying the artwork. */
+const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+
+function makeBook(spineText, base, ink, hgt) {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 384;
+  const g = c.getContext('2d');
+  g.fillStyle = hex(base);
+  g.fillRect(0, 0, 64, 384);
+  g.fillStyle = hex(ink);
+  g.fillRect(0, 16, 64, 4);
+  g.fillRect(0, 364, 64, 4);
+  g.save();
+  g.translate(34, 192);
+  g.rotate(-Math.PI / 2);
+  g.font = 'bold 24px Inter, "Noto Sans JP", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(spineText, 0, 0);
+  g.restore();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const spine = new THREE.MeshToonMaterial({ map: tex, gradientMap: toonRamp });
+  const plain = mat(base);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, hgt, 0.03),
+    [spine, plain, plain, plain, plain, plain]);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+// [spine text, card title, card line, cover colour, ink colour]
+const YURI = [
+  ['やがて君になる', 'Yagate Kimi ni Naru', 'Bloom Into You — Nakatani Nio. Soft blue cover, two girls on a station platform.', 0xe4edf7, 0x5b86bd],
+  ['citrus', 'citrus', 'Saburouta. Loud orange and lemon-yellow cover.', 0xf7dca6, 0xd97a2b],
+  ['ささめきこと', 'Sasameki Koto', 'Whispered Words — Ikeda Takashi. Pale green, hand-lettered title.', 0xe2eddd, 0x6a9c5c],
+  ['GIRL FRIENDS', 'GIRL FRIENDS', 'Morinaga Milk. Cream and rose pink, two girls sharing headphones.', 0xf8dde5, 0xcc6a89],
+  ['加瀬さん', 'Kase-san', 'Takashima Hiromi. Sky blue with morning glories climbing the border.', 0xdcefef, 0x4f9a9a],
+  ['青い花', 'Aoi Hana', 'Sweet Blue Flowers — Shimura Takako. Washed lilac and pale blue.', 0xe5e1f2, 0x7f76bf],
+  ['裏世界ピクニック', 'Urasekai Picnic', 'Otherside Picnic. Cold teal, a doorway standing in an empty field.', 0xd5dee6, 0x36506a],
+];
+
+const RUS = [
+  ['ЛАНДАУ', 'Ландау и Лифшиц', 'Теоретическая физика. Тёмно-синий переплёт, золотое тиснение.', 0x2c4a60, 0xd9c98c],
+  ['ИРОДОВ', 'Иродов', 'Задачи по общей физике. Голубая обложка, потрёпанный корешок.', 0x9fc6df, 0x22415c],
+  ['ДЕМИДОВИЧ', 'Демидович', 'Сборник задач и упражнений по математическому анализу.', 0x5c8a58, 0xf2ecd8],
+  ['ФИХТЕНГОЛЬЦ', 'Фихтенгольц', 'Курс дифференциального и интегрального исчисления, том II.', 0x7c3030, 0xead9b2],
+  ['СКАНАВИ', 'Сканави', 'Сборник задач по математике для поступающих во втузы.', 0x3d5fa0, 0xf1f1eb],
+  ['САВЕЛЬЕВ', 'Савельев', 'Курс общей физики. Серый коленкор, корешок в трещинах.', 0x6a6e75, 0xe1e6ec],
+];
+
+const SHELF_BOOKS = YURI.concat(RUS);
+
 /* A wire that sags between two points */
 function cable(pts, color = 0x2b2b2b, r = 0.006) {
   const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(p[0], p[1], p[2])));
@@ -623,8 +804,29 @@ function buildDesk() {
   lap.add(box(0.28, 0.016, 0.21, 0x2f3338, 0, TOP + 0.008, 0));
   const lid = box(0.28, 0.2, 0.012, 0x3a4046, 0, TOP + 0.105, -0.115);
   lid.rotation.x = 0.28;
-  const screen = box(0.26, 0.18, 0.004, 0x1b2b3a, 0, TOP + 0.105, -0.108);
+  const screenMat = new THREE.MeshToonMaterial({
+    map: SCREEN_CODE, emissive: 0x33506b, emissiveIntensity: 0.55, gradientMap: toonRamp,
+  });
+  const screen = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.18, 0.004), screenMat);
+  screen.position.set(0, TOP + 0.105, -0.108);
   screen.rotation.x = 0.28;
+
+  let vnOpen = false;
+  hotspot(screen, 'Laptop', 'Some code, half a lecture and eleven tabs. Tap it again.', () => {
+    vnOpen = !vnOpen;
+    screenMat.map = vnOpen ? SCREEN_VN : SCREEN_CODE;
+    screenMat.emissive.set(vnOpen ? 0x9ecdf0 : 0x33506b);
+    screenMat.needsUpdate = true;
+    if (vnOpen) {
+      playChorale();
+      screen.userData.hotspot.body =
+        '素晴らしき日々 — title screen, sky still. Bach, BWV 147 playing. Tap again to close it.';
+    } else {
+      if (stopMusic) stopMusic();
+      screen.userData.hotspot.body = 'Some code, half a lecture and eleven tabs. Tap it again.';
+    }
+    cardDesc.textContent = screen.userData.hotspot.body;
+  });
   lap.add(lid, screen);
   lap.rotation.y = Math.PI / 2;
   lap.position.set(0.0, 0, 0.0);          // straight in front of the chair
@@ -695,13 +897,15 @@ function buildDesk() {
   g.add(cable([[-0.15, TOP + 0.01, 0.2], [-0.11, TOP + 0.01, 0.13], [-0.05, TOP + 0.02, 0.06]], 0xf0a8c6, 0.004));
 
   /* socket under the desk, with the charger running up to the laptop */
-  g.add(box(0.014, 0.086, 0.086, 0xf3f0ea, -D / 2 + 0.007, 0.25, 0.02, 0.7));
+  const deskSocket = box(0.014, 0.086, 0.086, 0xf3f0ea, -D / 2 + 0.007, 0.25, 0.02, 0.7);
+  g.add(deskSocket);
   [-0.017, 0.017].forEach((dz) => {
     const hole = cyl(0.008, 0.01, 0x2c2924, -D / 2 + 0.016, 0.25, 0.02 + dz, 0.8, 0);
     hole.rotation.z = Math.PI / 2;
     g.add(hole);
   });
   g.add(box(0.05, 0.045, 0.05, 0x2a2a2a, -D / 2 + 0.05, 0.25, 0.02, 0.85));
+  hotspot(deskSocket, 'Socket', 'フォーク ちょだい〜　ｗｗｗ');
   g.add(cable([
     [-D / 2 + 0.075, 0.25, 0.02], [-0.2, 0.14, 0.06], [-0.24, 0.4, 0.1],
     [-0.24, 0.66, 0.08], [-0.16, TOP + 0.02, 0.04], [-0.09, TOP + 0.012, 0.0],
@@ -724,11 +928,14 @@ function buildBookcase() {
   g.add(cyl(0.012, 0.12, C.metal, D / 2 + 0.01, 0.6, -0.06));
   g.add(cyl(0.012, 0.12, C.metal, D / 2 + 0.01, 0.6, 0.06));
   // books
-  const spines = [0xb0453f, 0x2f5f9e, 0xd6a83c, 0x477a4e, 0x8a4a9c, 0x2f2f2f, 0xc96a3a, 0x4f7f9e];
   [0.76, 1.14, 1.52, 1.9].forEach((y, row) => {
     for (let i = 0; i < 11; i++) {
-      const hgt = 0.24 + ((i + row) % 3) * 0.04;
-      g.add(box(0.2, hgt, 0.035, spines[(i + row * 3) % spines.length], -0.06, y + hgt / 2, -W / 2 + 0.08 + i * 0.07, 0.9));
+      const b = SHELF_BOOKS[(i + row * 4) % SHELF_BOOKS.length];
+      const hgt = 0.24 + ((i + row) % 3) * 0.03;
+      const m = makeBook(b[0], b[3], b[4], hgt);
+      m.position.set(-0.06, y + hgt / 2, -W / 2 + 0.08 + i * 0.07);
+      hotspot(m, b[1], b[2]);
+      g.add(m);
     }
   });
   return g;
@@ -746,13 +953,15 @@ function buildShelves() {
   g.add(box(D, 0.36, 0.03, C.oak, 0, 1.45, -L / 2 + 0.02, 0.8));
   g.add(box(D, 0.36, 0.03, C.oak, 0, 1.45, 0.1, 0.8));
   // stuff on the shelves, kept inside the boards
-  const spines = [0x9e4038, 0x35608f, 0xc99a35, 0x3f7048, 0x7a4090, 0x2b2b2b];
-  for (let i = 0; i < 12; i++) {
-    const hgt = 0.2 + (i % 3) * 0.04;
-    const z = -END + 0.02 + i * 0.06;
-    if (z > END - 0.03) break;
-    g.add(box(0.16, hgt, 0.03, spines[i % spines.length], -0.02, 1.295 + hgt / 2, z, 0.9));
-  }
+  SHELF_BOOKS.forEach((b, i) => {
+    const hgt = 0.2 + (i % 3) * 0.03;
+    const z = -END + 0.03 + i * 0.062;
+    if (z > END - 0.03) return;
+    const m = makeBook(b[0], b[3], b[4], hgt);
+    m.position.set(-0.02, 1.295 + hgt / 2, z);
+    hotspot(m, b[1], b[2]);
+    g.add(m);
+  });
   for (let i = 0; i < 7; i++) {
     const z = -END + 0.08 + i * 0.17;
     if (z + 0.055 > END) break;
@@ -786,6 +995,7 @@ function buildShelves() {
   }
   saya.position.set(0.02, 1.278, 0.62);
   saya.rotation.y = -Math.PI / 2;
+  hotspot(saya, 'Saya', "trust me you don't wanna know");
   g.add(saya);
 
   /* medicine on the first shelf */
@@ -988,14 +1198,17 @@ function select(item) {
     cardCoords.hidden = true;
     return;
   }
+  const spot = item.userData.hotspot;
   outline.visible = true;
   updateOutline();
-  actRotate.hidden = mode !== 'move' || !!item.userData.fixed;
-  cardTitle.textContent = item.userData.name;
-  cardDesc.textContent = item.userData.desc;
-  showCoords(item);
+  actRotate.hidden = mode !== 'move' || !!item.userData.fixed || !!spot;
+  cardTitle.textContent = spot ? spot.title : item.userData.name;
+  cardDesc.textContent = spot ? spot.body : item.userData.desc;
+  if (spot) cardCoords.hidden = true;
+  else showCoords(item);
   card.hidden = false;
   gsap.fromTo(card, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: 'power3.out' });
+  if (spot && spot.onOpen) spot.onOpen();
 }
 
 /* ------------------------------------------------------------------
@@ -1055,14 +1268,24 @@ function setPointer(e) {
   pointer.y = -(e.clientY / innerHeight) * 2 + 1;
 }
 
-function pickItem() {
+function pickItem(allowHotspot) {
   raycaster.setFromCamera(pointer, camera);
-  const targets = items.concat(fixtures.filter((f) => f.visible));
+  const roots = items.concat(fixtures.filter((f) => f.visible));
+  const targets = roots.concat(hotspots.filter((h) => h.visible));
   const hits = raycaster.intersectObjects(targets, true);
   if (!hits.length) return null;
+
+  // walk up from whatever was hit: the nearest hotspot wins when we're
+  // just looking, otherwise fall back to the whole piece of furniture
   let o = hits[0].object;
-  while (o.parent && !targets.includes(o)) o = o.parent;
-  return targets.includes(o) ? o : null;
+  let spot = null;
+  while (o) {
+    if (!spot && o.userData && o.userData.hotspot) spot = o;
+    if (roots.includes(o)) return (allowHotspot && spot) || o;
+    if (!o.parent) break;
+    o = o.parent;
+  }
+  return allowHotspot ? spot : null;
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -1070,7 +1293,7 @@ canvas.addEventListener('pointerdown', (e) => {
   downAt = { x: e.clientX, y: e.clientY };
   if (mode !== 'move') return;
 
-  const item = pickItem();
+  const item = pickItem(false);
   if (!item) return;
   if (!items.includes(item)) { select(item); return; } // fixtures stay put
 
@@ -1113,7 +1336,7 @@ canvas.addEventListener('pointerup', (e) => {
 
   if (!wasDrag && moved < 6) {
     setPointer(e);
-    const item = pickItem();
+    const item = pickItem(mode === 'look');
     if (item) {
       select(item);
       if (mode === 'look') zoomToItem(item);
@@ -1298,7 +1521,8 @@ renderer.setAnimationLoop(() => {
 });
 
 /* exposed so the scene can be checked headlessly */
-export const __test = { scene, camera, controls, items, fixtures, ROOM, axesGroup, select, zoomToItem, saveLayout, setNight, wallDecor, hideNearWallDecor };
+export const __test = { scene, camera, controls, items, fixtures, ROOM, axesGroup, hotspots,
+  audioNotes: () => (audioCtx ? audioCtx.made || 0 : 0), select, zoomToItem, saveLayout, setNight, wallDecor, hideNearWallDecor };
 
 /* fade the loader once the first frame is on screen */
 requestAnimationFrame(() => requestAnimationFrame(() => {
