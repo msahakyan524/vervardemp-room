@@ -1204,8 +1204,8 @@ function select(item) {
   actRotate.hidden = mode !== 'move' || !!item.userData.fixed || !!spot;
   cardTitle.textContent = spot ? spot.title : item.userData.name;
   cardDesc.textContent = spot ? spot.body : item.userData.desc;
-  if (spot) cardCoords.hidden = true;
-  else showCoords(item);
+  if (spot || !axesGroup.visible) cardCoords.hidden = true;
+  else showCoords(item);   // numbers only while the Axes overlay is up
   card.hidden = false;
   gsap.fromTo(card, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: 'power3.out' });
   if (spot && spot.onOpen) spot.onOpen();
@@ -1318,7 +1318,7 @@ canvas.addEventListener('pointermove', (e) => {
   dragging.position.x = THREE.MathUtils.clamp(hitPoint.x + dragOffset.x, -limX, limX);
   dragging.position.z = THREE.MathUtils.clamp(hitPoint.z + dragOffset.z, -limZ, limZ);
   updateOutline();
-  showCoords(dragging);
+  if (axesGroup.visible) showCoords(dragging);
 });
 
 function endDrag(e) {
@@ -1434,6 +1434,8 @@ btnPlan.addEventListener('click', () => setPlan(!planMode));
 btnAxes.addEventListener('click', () => {
   axesGroup.visible = !axesGroup.visible;
   btnAxes.classList.toggle('is-active', axesGroup.visible);
+  if (selected && !selected.userData.hotspot && axesGroup.visible) showCoords(selected);
+  else cardCoords.hidden = true;
   hint.textContent = axesGroup.visible
     ? 'Zero is the middle of the floor · each grid square is half a metre'
     : 'Drag to spin · pinch or zoom · tap anything';
