@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 import gsap from 'gsap';
 
 /* ------------------------------------------------------------------
@@ -14,7 +15,7 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 3;
+const LAYOUT_VERSION = 4;
 
 const C = {
   wall: 0xf0ece5,
@@ -246,6 +247,7 @@ const curtainGroup = new THREE.Group();
   panel2.position.x = WIN.x + 0.82;
   curtainGroup.add(panel2);
 }
+curtainGroup.name = 'curtain';   // allowed to hang over the window
 onWall(curtainGroup, N_NORTH, new THREE.Vector3(0, 0, -HD));
 
 /* ------------------------------------------------------------------
@@ -253,7 +255,8 @@ onWall(curtainGroup, N_NORTH, new THREE.Vector3(0, 0, -HD));
 ------------------------------------------------------------------ */
 const doorGroup = new THREE.Group();
 {
-  const DX = -0.5, DW = 0.86, DH = 2.08;
+  // hard into the -X corner, so it opens back against the desk wall
+  const DX = -1.25, DW = 0.86, DH = 2.08;
   const leaf = box(DW, DH, 0.05, C.door, DX, DH / 2, HD - 0.04, 0.8);
   doorGroup.add(leaf);
   for (let i = 1; i <= 5; i++) {
@@ -271,17 +274,25 @@ const doorGroup = new THREE.Group();
   knob.rotation.x = Math.PI / 2;
   doorGroup.add(knob);
 
-  // light switch, at hand height, with a socket to its right
-  doorGroup.add(box(0.086, 0.086, 0.014, 0xf3f0ea, 0.22, 0.92, HD - 0.02, 0.7));
-  doorGroup.add(box(0.05, 0.05, 0.008, 0xe4e0d8, 0.22, 0.92, HD - 0.028, 0.7));
-  doorGroup.add(box(0.086, 0.086, 0.014, 0xf3f0ea, 0.36, 0.92, HD - 0.02, 0.7));
+}
+doorGroup.name = 'door';
+onWall(doorGroup, N_SOUTH, new THREE.Vector3(0, 0, HD));
+
+/* light switch at hand height, with a socket to its right — kept separate
+   from the door so each sits on the wall on its own */
+const switchPlate = new THREE.Group();
+{
+  switchPlate.add(box(0.086, 0.086, 0.014, 0xf3f0ea, 0.22, 0.92, HD - 0.02, 0.7));
+  switchPlate.add(box(0.05, 0.05, 0.008, 0xe4e0d8, 0.22, 0.92, HD - 0.028, 0.7));
+  switchPlate.add(box(0.086, 0.086, 0.014, 0xf3f0ea, 0.36, 0.92, HD - 0.02, 0.7));
   [-0.017, 0.017].forEach((dx) => {
     const hole = cyl(0.008, 0.01, 0x2c2924, 0.36 + dx, 0.92, HD - 0.028, 0.8, 0);
     hole.rotation.x = Math.PI / 2;
-    doorGroup.add(hole);
+    switchPlate.add(hole);
   });
 }
-onWall(doorGroup, N_SOUTH, new THREE.Vector3(0, 0, HD));
+switchPlate.name = 'switch';
+onWall(switchPlate, N_SOUTH, new THREE.Vector3(0, 0, HD));
 fixture(doorGroup, 'Door', 'The way in. Straight ahead of you is the bookshelf, the built-in closet is on your right.');
 
 /* ------------------------------------------------------------------
@@ -296,12 +307,13 @@ const closetGroup = new THREE.Group();
   // recessed panel sitting in the wall
   closetGroup.add(box(W, H, 0.06, 0x3f2e1e, CX, H / 2, HD - 0.03, 0.85));
 
-  // left-hand door (the +X half, as you face the closet) is the mirror
-  const mirror = new THREE.Mesh(
+  // left-hand door (the +X half, as you face the closet) is a real mirror —
+  // it renders the room back at you rather than just looking shiny
+  const mirror = new Reflector(
     new THREE.PlaneGeometry(W / 2 - 0.05, H - 0.1),
-    mat(0x8a969c, 0.06, 0.95)
+    { color: 0xb6bec4, textureWidth: 1024, textureHeight: 1024 }
   );
-  mirror.position.set(CX + W / 4, H / 2, zf - 0.005);
+  mirror.position.set(CX + W / 4, H / 2, zf - 0.008);
   mirror.rotation.y = Math.PI;
   closetGroup.add(mirror);
 
@@ -320,7 +332,7 @@ const closetGroup = new THREE.Group();
     });
 
   // two tall cupboard doors above it, up to the cornice
-  const topH = ROOM.h - H - 0.16;
+  const topH = ROOM.h - H - 0.20;   // stops clear of the cornice
   closetGroup.add(box(W, topH, 0.09, 0x3f2e1e, CX, H + topH / 2 + 0.04, HD - 0.05, 0.85));
   [-1, 1].forEach((s) => {
     closetGroup.add(box(W / 2 - 0.05, topH - 0.06, 0.03, C.brownDark, CX + s * W / 4, H + topH / 2 + 0.04, HD - 0.1, 0.8));
@@ -397,7 +409,7 @@ poster((g, w, h) => {
     g.fillStyle = c;
     g.beginPath(); g.ellipse(w * (0.25 + i * 0.17), h * (0.4 + (i % 2) * 0.2), w * 0.19, h * 0.16, i, 0, 7); g.fill();
   });
-}, 0.34, 0.26, HW - 0.02, 1.76, 0.2, N_EAST);
+}, 0.34, 0.26, HW - 0.02, 1.45, -0.05, N_EAST);
 
 poster((g, w, h) => {
   fill(g, '#f0d979', 0, 0, w, h);
@@ -406,7 +418,7 @@ poster((g, w, h) => {
   g.beginPath(); g.arc(w * 0.5, h * 0.26, w * 0.13, 0, 7); g.fill();
   g.fillStyle = '#d84a4a';
   g.beginPath(); g.arc(w * 0.7, h * 0.3, w * 0.1, 0, 7); g.fill();
-}, 0.3, 0.26, HW - 0.02, 1.76, -0.15, N_EAST);
+}, 0.3, 0.26, HW - 0.02, 1.45, -0.45, N_EAST);
 
 // the scratch-off anime grid — right above the pillows, so it's over your
 // head when you're lying down
@@ -419,7 +431,7 @@ poster((g, w, h) => {
     g.fillStyle = `hsl(${hue} 55% ${45 + ((r + c2) % 3) * 8}%)`;
     g.fillRect(w * (0.07 + c2 * 0.108), h * (0.16 + r * 0.073), w * 0.09, h * 0.06);
   }
-}, 0.42, 0.58, 1.07, 1.82, -HD + 0.02, N_NORTH);
+}, 0.42, 0.58, 1.34, 1.82, -HD + 0.02, N_NORTH);
 
 // small calendar + print near the bed head
 poster((g, w, h) => {
@@ -445,7 +457,7 @@ poster((g, w, h) => {
   fill(g, grad, 0, 0, w, h);
   g.fillStyle = '#f6f1e2';
   g.beginPath(); g.moveTo(w * 0.2, h); g.lineTo(w * 0.5, h * 0.42); g.lineTo(w * 0.82, h); g.fill();
-}, 0.3, 0.42, 0.95, 1.62, HD - 0.13, N_SOUTH);
+}, 0.3, 0.42, 0.88, 1.62, HD - 0.13, N_SOUTH).name = 'on-closet';
 
 // sticker cluster under them
 poster((g, w, h) => {
@@ -454,7 +466,7 @@ poster((g, w, h) => {
   cs.forEach((c, i) => { g.fillStyle = c; g.fillRect(w * (0.04 + (i % 3) * 0.32), h * (0.08 + Math.floor(i / 3) * 0.46), w * 0.28, h * 0.4); });
 }, 0.32, 0.16, 0.22, 1.3, HD - 0.02, N_SOUTH);
 
-/* a few more prints on the other side of the door */
+/* prints beside the tall bookcase, on the desk wall */
 poster((g, w, h) => {
   const grad = g.createLinearGradient(0, 0, w, h);
   grad.addColorStop(0, '#1d2f5c'); grad.addColorStop(1, '#8e3f6b');
@@ -463,7 +475,7 @@ poster((g, w, h) => {
   g.beginPath(); g.arc(w * 0.62, h * 0.3, w * 0.18, 0, 7); g.fill();
   g.fillStyle = '#12172c';
   g.beginPath(); g.moveTo(0, h); g.lineTo(w * 0.35, h * 0.5); g.lineTo(w * 0.7, h); g.fill();
-}, 0.36, 0.5, -1.22, 1.72, HD - 0.02, N_SOUTH);
+}, 0.24, 0.32, -HW + 0.02, 1.88, 1.58, N_WEST);
 
 poster((g, w, h) => {
   fill(g, '#f6f1e6', 0, 0, w, h);
@@ -471,16 +483,7 @@ poster((g, w, h) => {
   g.beginPath(); g.ellipse(w * 0.5, h * 0.45, w * 0.3, h * 0.28, 0.3, 0, 7); g.fill();
   g.fillStyle = '#2f4f8f';
   for (let i = 0; i < 4; i++) g.fillRect(w * 0.12, h * (0.72 + i * 0.06), w * (0.7 - i * 0.12), h * 0.035);
-}, 0.28, 0.36, -1.58, 1.28, HD - 0.02, N_SOUTH);
-
-poster((g, w, h) => {
-  fill(g, '#20232b', 0, 0, w, h);
-  const cs = ['#e8574f', '#4f8fe8', '#5fbf6a', '#e8b07a'];
-  cs.forEach((c, i) => {
-    g.fillStyle = c;
-    g.beginPath(); g.arc(w * (0.25 + (i % 2) * 0.5), h * (0.28 + Math.floor(i / 2) * 0.44), w * 0.16, 0, 7); g.fill();
-  });
-}, 0.26, 0.3, -1.55, 1.78, HD - 0.02, N_SOUTH);
+}, 0.24, 0.3, -HW + 0.02, 1.5, 1.58, N_WEST);
 
 /* trig tables taped to the wall under the shelves */
 poster((g, w, h) => {
@@ -596,7 +599,7 @@ function buildDesk() {
   screen.rotation.x = 0.28;
   lap.add(lid, screen);
   lap.rotation.y = Math.PI / 2;
-  lap.position.set(0.0, 0, -0.42);
+  lap.position.set(0.0, 0, 0.0);          // straight in front of the chair
   g.add(lap);
 
   /* anime mousepad + black mouse */
@@ -618,30 +621,31 @@ function buildDesk() {
     t.colorSpace = THREE.SRGBColorSpace;
     return new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 });
   })());
+  /* you're right-handed, and you face -x — so your right hand is -z */
   pad.rotation.x = -Math.PI / 2;
   pad.rotation.z = Math.PI / 2;
-  pad.position.set(0.04, TOP + 0.002, -0.05);
+  pad.position.set(0.03, TOP + 0.002, -0.34);
   g.add(pad);
 
   const mouse = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), mat(0x22242a, 0.5));
   mouse.scale.set(0.75, 0.5, 1.15);
-  mouse.position.set(0.04, TOP + 0.017, -0.05);
+  mouse.position.set(0.03, TOP + 0.017, -0.34);
   mouse.castShadow = true;
   g.add(mouse);
-  g.add(cable([[0.04, TOP + 0.02, -0.13], [0.02, TOP + 0.03, -0.26], [-0.02, TOP + 0.02, -0.4]], 0x1f1f1f, 0.004));
+  g.add(cable([[0.03, TOP + 0.02, -0.26], [0.0, TOP + 0.03, -0.16], [-0.04, TOP + 0.02, -0.08]], 0x1f1f1f, 0.004));
 
-  /* pink Red Bull */
-  g.add(cyl(0.032, 0.135, 0xe86aa0, -0.14, TOP + 0.068, -0.72, 0.35, 0.55));
-  g.add(cyl(0.028, 0.008, 0xb9bcc0, -0.14, TOP + 0.139, -0.72, 0.3, 0.8));
+  /* pink Red Bull, off to the left */
+  g.add(cyl(0.032, 0.135, 0xe86aa0, -0.14, TOP + 0.068, 0.36, 0.35, 0.55));
+  g.add(cyl(0.028, 0.008, 0xb9bcc0, -0.14, TOP + 0.139, 0.36, 0.3, 0.8));
 
   /* half-drunk Pepsi Zero — you can see where the drink stops */
-  g.add(cyl(0.035, 0.1, 0x141922, -0.16, TOP + 0.05, 0.2, 0.25, 0.1));
+  g.add(cyl(0.035, 0.1, 0x141922, -0.16, TOP + 0.05, 0.6, 0.25, 0.1));
   const empty = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.1, 18),
     new THREE.MeshStandardMaterial({ color: 0xdfe6ea, roughness: 0.1, transparent: true, opacity: 0.4 }));
-  empty.position.set(-0.16, TOP + 0.15, 0.2);
+  empty.position.set(-0.16, TOP + 0.15, 0.6);
   g.add(empty);
-  g.add(cyl(0.014, 0.04, 0x1b4fa0, -0.16, TOP + 0.22, 0.2, 0.4));
-  g.add(cyl(0.036, 0.03, 0x2f6fd0, -0.16, TOP + 0.05, 0.2, 0.5));
+  g.add(cyl(0.014, 0.04, 0x1b4fa0, -0.16, TOP + 0.22, 0.6, 0.4));
+  g.add(cyl(0.036, 0.03, 0x2f6fd0, -0.16, TOP + 0.05, 0.6, 0.5));
 
   /* mini pink fan, plugged into the laptop */
   const fan = new THREE.Group();
@@ -658,21 +662,21 @@ function buildDesk() {
     blade.position.z = Math.sin((i / 5) * Math.PI * 2) * 0.024;
     fan.add(blade);
   }
-  fan.position.set(-0.16, 0, -0.24);
+  fan.position.set(-0.15, 0, 0.2);
   g.add(fan);
-  g.add(cable([[-0.16, TOP + 0.01, -0.24], [-0.12, TOP + 0.01, -0.33], [-0.06, TOP + 0.02, -0.4]], 0xf0a8c6, 0.004));
+  g.add(cable([[-0.15, TOP + 0.01, 0.2], [-0.11, TOP + 0.01, 0.13], [-0.05, TOP + 0.02, 0.06]], 0xf0a8c6, 0.004));
 
   /* socket under the desk, with the charger running up to the laptop */
-  g.add(box(0.014, 0.086, 0.086, 0xf3f0ea, -D / 2 + 0.007, 0.25, -0.2, 0.7));
+  g.add(box(0.014, 0.086, 0.086, 0xf3f0ea, -D / 2 + 0.007, 0.25, 0.02, 0.7));
   [-0.017, 0.017].forEach((dz) => {
-    const hole = cyl(0.008, 0.01, 0x2c2924, -D / 2 + 0.016, 0.25, -0.2 + dz, 0.8, 0);
+    const hole = cyl(0.008, 0.01, 0x2c2924, -D / 2 + 0.016, 0.25, 0.02 + dz, 0.8, 0);
     hole.rotation.z = Math.PI / 2;
     g.add(hole);
   });
-  g.add(box(0.05, 0.045, 0.05, 0x2a2a2a, -D / 2 + 0.05, 0.25, -0.2, 0.85));
+  g.add(box(0.05, 0.045, 0.05, 0x2a2a2a, -D / 2 + 0.05, 0.25, 0.02, 0.85));
   g.add(cable([
-    [-D / 2 + 0.075, 0.25, -0.2], [-0.16, 0.12, -0.3], [-0.2, 0.3, -0.45],
-    [-0.24, 0.62, -0.5], [-0.16, TOP + 0.02, -0.5], [-0.08, TOP + 0.012, -0.46],
+    [-D / 2 + 0.075, 0.25, 0.02], [-0.2, 0.14, 0.06], [-0.24, 0.4, 0.1],
+    [-0.24, 0.66, 0.08], [-0.16, TOP + 0.02, 0.04], [-0.09, TOP + 0.012, 0.0],
   ], 0x1f1f1f, 0.005));
 
   return g;
@@ -706,21 +710,25 @@ function buildBookcase() {
 function buildShelves() {
   const g = new THREE.Group();
   const L = 1.75, D = 0.28;
-  [1.26, 1.63, 2.0].forEach((y, k) => {
-    const len = k === 2 ? L * 0.8 : L;
-    g.add(box(D, 0.035, len, C.oak, 0, y, 0, 0.8));
-    if (k < 2) g.add(box(0.03, 0.34, len, C.oak, -D / 2 + 0.02, y + 0.19, 0, 0.85));
+  const END = L / 2 - 0.08;        // nothing on a shelf may pass this
+  [1.26, 1.63, 2.0].forEach((y) => {
+    g.add(box(D, 0.035, L, C.oak, 0, y, 0, 0.8));
+    g.add(box(0.03, 0.34, L, C.oak, -D / 2 + 0.02, y + 0.19, 0, 0.85));
   });
   g.add(box(D, 0.36, 0.03, C.oak, 0, 1.45, -L / 2 + 0.02, 0.8));
   g.add(box(D, 0.36, 0.03, C.oak, 0, 1.45, 0.1, 0.8));
-  // stuff on the shelves
+  // stuff on the shelves, kept inside the boards
   const spines = [0x9e4038, 0x35608f, 0xc99a35, 0x3f7048, 0x7a4090, 0x2b2b2b];
-  for (let i = 0; i < 13; i++) {
+  for (let i = 0; i < 12; i++) {
     const hgt = 0.2 + (i % 3) * 0.04;
-    g.add(box(0.16, hgt, 0.03, spines[i % spines.length], -0.02, 1.295 + hgt / 2, -L / 2 + 0.1 + i * 0.06, 0.9));
+    const z = -END + 0.02 + i * 0.06;
+    if (z > END - 0.03) break;
+    g.add(box(0.16, hgt, 0.03, spines[i % spines.length], -0.02, 1.295 + hgt / 2, z, 0.9));
   }
-  for (let i = 0; i < 8; i++) {
-    g.add(box(0.14, 0.14, 0.11, [0x6fa8c9, 0xd98f5a, 0xd0d4c8, 0x9a7fc0][i % 4], -0.02, 1.72, -L / 2 + 0.16 + i * 0.17, 0.85));
+  for (let i = 0; i < 7; i++) {
+    const z = -END + 0.08 + i * 0.17;
+    if (z + 0.055 > END) break;
+    g.add(box(0.14, 0.14, 0.11, [0x6fa8c9, 0xd98f5a, 0xd0d4c8, 0x9a7fc0][i % 4], -0.02, 1.72, z, 0.85));
   }
   /* Saya, 1/7 scale — about 22 cm tall with the base */
   const saya = new THREE.Group();
@@ -792,6 +800,28 @@ function buildChair() {
   return g;
 }
 
+/* Bass in its black gig bag, leaning on the wall beside the desk */
+function buildBass() {
+  const g = new THREE.Group();
+  const lean = new THREE.Group();
+  const shell = 0x131315;
+  lean.add(box(0.13, 1.0, 0.30, shell, 0, 0.62, 0, 0.8));            // body of the bag
+  const bout = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.13, 20), mat(shell, 0.8));
+  bout.rotation.z = Math.PI / 2;
+  bout.position.y = 0.18;
+  bout.castShadow = true;
+  lean.add(bout);
+  lean.add(box(0.115, 0.26, 0.17, shell, 0, 1.16, 0, 0.8));           // neck end
+  lean.add(box(0.10, 0.13, 0.20, shell, 0, 1.31, 0, 0.8));            // headstock bulge
+  lean.add(box(0.035, 0.02, 0.17, 0x3d3d40, 0.07, 0.72, 0, 0.6));     // carry handle
+  lean.add(box(0.008, 1.15, 0.012, 0x767a80, 0.066, 0.66, 0, 0.45));  // zip
+  lean.add(box(0.09, 0.05, 0.03, 0x2c2c30, 0.02, 0.9, 0.14, 0.7));    // side pocket buckle
+  lean.rotation.z = 0.1;                                              // tipped back on the wall
+  g.add(lean);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
 const bed = addItem('Bed', 'Head against the window wall, running down the right-hand side. Grey ribbed blanket, storage drawers underneath.',
   buildBed, HW - 0.68, -HD + 1.14);
 
@@ -806,6 +836,9 @@ const shelves = addItem('Wall shelves', 'Three long boards above the desk: books
 
 const chair = addItem('Desk chair', 'Dark wood with the tall slatted back, pulled up to the desk facing the laptop.',
   buildChair, -HW + 0.95, -0.8, -Math.PI / 2);
+
+const bass = addItem('Bass guitar', 'In its black gig bag, standing in the gap between the desk and the wall.',
+  buildBass, -HW + 0.2, 0.26);
 
 items.forEach((i) => { i.userData.half = halfSize(i); });
 
