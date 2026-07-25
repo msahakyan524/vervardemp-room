@@ -10,7 +10,11 @@ import gsap from 'gsap';
 const ROOM = { w: 3.5, d: 3.5, h: 2.8 };
 const HW = ROOM.w / 2;
 const HD = ROOM.d / 2;
-const STORE_KEY = 'room-layout-v2';
+const STORE_KEY = 'room-layout';
+/* Bump this whenever the built-in layout changes. Anything saved under an
+   older number is thrown away, so a browser that remembers where you once
+   dragged the desk can never hide a newer version of the room. */
+const LAYOUT_VERSION = 3;
 
 const C = {
   wall: 0xf0ece5,
@@ -1065,23 +1069,32 @@ canvas.addEventListener('pointercancel', endDrag);
    Remember the layout
 ------------------------------------------------------------------ */
 function saveLayout() {
-  const data = {};
-  items.forEach((i) => { data[i.userData.id] = [i.position.x, i.position.z, i.rotation.y]; });
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (_) {}
+  const at = {};
+  items.forEach((i) => { at[i.userData.id] = [i.position.x, i.position.z, i.rotation.y]; });
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: LAYOUT_VERSION, at })); } catch (_) {}
 }
 
 function loadLayout() {
-  let data;
-  try { data = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (_) { return; }
-  if (!data) return;
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (_) { return; }
+  if (!saved || saved.v !== LAYOUT_VERSION || !saved.at) {
+    // saved by an older version of the room — drop it and use the new layout
+    try { localStorage.removeItem(STORE_KEY); } catch (_) {}
+    return;
+  }
   items.forEach((i) => {
-    const v = data[i.userData.id];
+    const v = saved.at[i.userData.id];
     if (!v) return;
     i.position.x = v[0];
     i.position.z = v[1];
     i.rotation.y = v[2];
   });
 }
+
+/* clear out the keys older builds used, so nothing lingers */
+['room-layout-v1', 'room-layout-v2'].forEach((k) => {
+  try { localStorage.removeItem(k); } catch (_) {}
+});
 
 const defaults = items.map((i) => [i.position.x, i.position.z, i.rotation.y]);
 loadLayout();
