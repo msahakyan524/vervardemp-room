@@ -15,7 +15,7 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 7;
+const LAYOUT_VERSION = 8;
 
 const C = {
   wall: 0xf0ece5,
@@ -826,19 +826,19 @@ const bed = addItem('Bed', 'Head against the window wall, running down the right
   buildBed, HW - 0.68, -HD + 1.14);
 
 const desk = addItem('Desk', 'Light oak, pushed up towards the window. Laptop facing the chair, fan and charger plugged in.',
-  buildDesk, -HW + 0.56, -0.8);
+  buildDesk, -HW + 0.3, -0.39);
 
 const bookcase = addItem('Bookcase', 'Tall oak bookcase — manga, folders and medals, cupboards at the bottom.',
   buildBookcase, -HW + 0.23, 0.95);
 
 const shelves = addItem('Wall shelves', 'Three long boards above the desk: books, medicine, the Saya figure, dried flowers on top.',
-  buildShelves, -HW + 0.14, -0.85);
+  buildShelves, -HW + 0.14, -0.42);
 
 const chair = addItem('Desk chair', 'Dark wood with the tall slatted back, pulled up to the desk facing the laptop.',
-  buildChair, -HW + 1.22, -0.8, -Math.PI / 2);
+  buildChair, -HW + 0.95, -0.39, -Math.PI / 2);
 
-const bass = addItem('Bass guitar', 'In its black gig bag, slotted into the gap between the back of the desk and the wall.',
-  buildBass, -HW + 0.13, -1.28);
+const bass = addItem('Bass guitar', 'In its black gig bag, standing in the gap between the end of the desk and the window wall.',
+  buildBass, -HW + 0.1, -1.5);
 
 items.forEach((i) => { i.userData.half = halfSize(i); });
 
