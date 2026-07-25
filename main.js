@@ -16,7 +16,7 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 12;
+const LAYOUT_VERSION = 13;
 
 const C = {
   wall: 0xf4ecdf,
@@ -760,60 +760,358 @@ function playChorale() {
   return CHORALE.length * step;
 }
 
-/* Book spines, printed with the title. Colours follow each cover's
-   palette rather than copying the artwork. */
+/* ------------------------------------------------------------------
+   Book covers, drawn from scratch.
+
+   These are impressions, not reproductions: the real artwork is
+   copyrighted and there are no image files in this project. What is
+   accurate is the palette, the layout and where the title sits — enough
+   that the right book is recognisable on the shelf.
+------------------------------------------------------------------ */
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
-function makeBook(spineText, base, ink, hgt) {
-  const c = document.createElement('canvas');
-  c.width = 64;
-  c.height = 384;
-  const g = c.getContext('2d');
-  g.fillStyle = hex(base);
-  g.fillRect(0, 0, 64, 384);
-  g.fillStyle = hex(ink);
-  g.fillRect(0, 16, 64, 4);
-  g.fillRect(0, 364, 64, 4);
-  g.save();
-  g.translate(34, 192);
-  g.rotate(-Math.PI / 2);
-  g.font = 'bold 24px Inter, "Noto Sans JP", sans-serif';
+function centred(g, text, x, y, maxW, size, font) {
+  g.font = `${size}px ${font}`;
+  let s2 = size;
+  while (g.measureText(text).width > maxW && s2 > 8) {
+    s2 -= 1;
+    g.font = `${s2}px ${font}`;
+  }
   g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(spineText, 0, 0);
-  g.restore();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const spine = new THREE.MeshToonMaterial({ map: tex, gradientMap: toonRamp });
-  const plain = mat(base);
+  g.fillText(text, x, y);
+  return s2;
+}
+
+function wrapped(g, text, x, y, maxW, size, lh, font) {
+  g.font = `${size}px ${font}`;
+  g.textAlign = 'center';
+  const words = text.split(' ');
+  let line = '';
+  let ly = y;
+  words.forEach((w) => {
+    const test = line ? line + ' ' + w : w;
+    if (g.measureText(test).width > maxW && line) {
+      g.fillText(line, x, ly);
+      ly += lh;
+      line = w;
+    } else line = test;
+  });
+  if (line) g.fillText(line, x, ly);
+  return ly;
+}
+
+/* one simple cel-style figure */
+function person(g, x, y, s, hair, skin, cloth, longHair) {
+  g.fillStyle = cloth;
+  g.beginPath();
+  g.moveTo(x - 40 * s, y + 110 * s);
+  g.quadraticCurveTo(x, y + 30 * s, x + 40 * s, y + 110 * s);
+  g.closePath();
+  g.fill();
+
+  g.fillStyle = skin;
+  g.fillRect(x - 7 * s, y + 20 * s, 14 * s, 18 * s);
+
+  if (longHair) {
+    g.fillStyle = hair;
+    g.beginPath();
+    g.ellipse(x, y + 36 * s, 31 * s, 58 * s, 0, 0, 7);
+    g.fill();
+  }
+
+  g.fillStyle = skin;
+  g.beginPath();
+  g.ellipse(x, y, 24 * s, 27 * s, 0, 0, 7);
+  g.fill();
+
+  g.fillStyle = hair;
+  g.beginPath();
+  g.ellipse(x, y - 11 * s, 25 * s, 17 * s, 0, 0, 7);
+  g.fill();
+  const side = longHair ? 54 : 24;
+  g.fillRect(x - 26 * s, y - 9 * s, 9 * s, side * s);
+  g.fillRect(x + 17 * s, y - 9 * s, 9 * s, side * s);
+
+  g.fillStyle = '#2a2a33';
+  g.beginPath(); g.ellipse(x - 9 * s, y + 4 * s, 3.4 * s, 4.8 * s, 0, 0, 7); g.fill();
+  g.beginPath(); g.ellipse(x + 9 * s, y + 4 * s, 3.4 * s, 4.8 * s, 0, 0, 7); g.fill();
+}
+
+const JP = '"Noto Sans JP", "Hiragino Sans", sans-serif';
+const SERIF = 'Georgia, "Times New Roman", serif';
+
+function mangaCover(c) {
+  return (g, w, h) => {
+    const sky = g.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, hex(c.bg1));
+    sky.addColorStop(1, hex(c.bg2));
+    g.fillStyle = sky;
+    g.fillRect(0, 0, w, h);
+
+    if (c.motif === 'citrus') {
+      g.fillStyle = 'rgba(255,255,255,0.30)';
+      [[70, 90, 46], [330, 150, 34], [60, 470, 38], [345, 430, 28]].forEach(([x, y, r]) => {
+        g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+      });
+    } else if (c.motif === 'flowers') {
+      [[46, 120], [356, 200], [40, 380], [360, 470], [80, 520]].forEach(([x, y], i) => {
+        g.fillStyle = i % 2 ? '#7a5fc0' : '#5f8fd0';
+        for (let k = 0; k < 5; k++) {
+          const a = (k / 5) * Math.PI * 2;
+          g.beginPath();
+          g.ellipse(x + Math.cos(a) * 12, y + Math.sin(a) * 12, 9, 9, 0, 0, 7);
+          g.fill();
+        }
+        g.fillStyle = '#f4e9a8';
+        g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill();
+      });
+    } else if (c.motif === 'grass') {
+      g.fillStyle = hex(c.accent);
+      g.beginPath();
+      g.moveTo(0, h);
+      g.lineTo(0, h - 120);
+      for (let x = 0; x <= w; x += 20) g.lineTo(x, h - 120 + Math.sin(x / 30) * 22);
+      g.lineTo(w, h);
+      g.fill();
+    } else if (c.motif === 'doorway') {
+      g.fillStyle = 'rgba(255,255,255,0.85)';
+      g.fillRect(w / 2 - 44, h / 2 - 40, 88, 150);
+      g.fillStyle = hex(c.bg2);
+      g.fillRect(w / 2 - 34, h / 2 - 28, 68, 138);
+    }
+
+    person(g, w * 0.36, h * 0.44, 1.5, hex(c.hairA), '#f6ddcd', hex(c.clothA), true);
+    person(g, w * 0.64, h * 0.50, 1.4, hex(c.hairB), '#f8e2d4', hex(c.clothB), c.shortB !== true);
+
+    g.fillStyle = hex(c.ink);
+    if (c.titlePos === 'band') {
+      g.fillStyle = 'rgba(255,255,255,0.92)';
+      g.fillRect(0, h - 112, w, 74);
+      g.fillStyle = hex(c.ink);
+      centred(g, c.title, w / 2, h - 62, w - 40, 46, JP);
+    } else if (c.titlePos === 'big') {
+      centred(g, c.title, w / 2, h - 76, w - 40, 84, 'Georgia, serif');
+    } else if (c.titlePos === 'v-left' || c.titlePos === 'v-right') {
+      const x = c.titlePos === 'v-left' ? 40 : w - 40;
+      g.save();
+      g.translate(x, 60);
+      g.font = `40px ${JP}`;
+      g.textAlign = 'center';
+      [...c.title].forEach((ch, i) => g.fillText(ch, 0, i * 44));
+      g.restore();
+    } else {
+      centred(g, c.title, w / 2, 66, w - 40, 44, JP);
+    }
+
+    g.fillStyle = hex(c.ink);
+    g.font = `20px Inter, sans-serif`;
+    g.textAlign = 'center';
+    g.fillText(c.author, w / 2, h - 18);
+  };
+}
+
+/* Soviet textbooks are plain typography, so these get genuinely close */
+function sovietCover(c) {
+  return (g, w, h) => {
+    g.fillStyle = hex(c.bg);
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = hex(c.ink);
+    g.lineWidth = 3;
+    g.strokeRect(26, 26, w - 52, h - 52);
+    g.lineWidth = 1;
+    g.strokeRect(36, 36, w - 72, h - 72);
+
+    g.fillStyle = hex(c.ink);
+    centred(g, c.author, w / 2, 108, w - 110, 30, SERIF);
+    g.fillRect(w / 2 - 70, 132, 140, 2);
+
+    wrapped(g, c.title, w / 2, 232, w - 120, 34, 42, SERIF);
+    if (c.sub) {
+      g.font = `22px ${SERIF}`;
+      g.fillText(c.sub, w / 2, h - 150);
+    }
+    g.fillRect(w / 2 - 44, h - 116, 88, 2);
+    g.font = `19px ${SERIF}`;
+    g.fillText(c.publisher, w / 2, h - 82);
+  };
+}
+
+const BOOKS = [
+  { spine: 'やがて君になる', title: 'Yagate Kimi ni Naru',
+    note: 'Bloom Into You — Nakatani Nio. Pale blue, two girls on a station platform, title running down the left.',
+    base: 0xe4edf7, ink: 0xc0392f,
+    cover: mangaCover({ bg1: 0xdce9f7, bg2: 0xf4f7fa, accent: 0x8fb6dd, ink: 0xc0392f,
+      hairA: 0x3b3a46, hairB: 0x8d6a4a, clothA: 0x2f3d5c, clothB: 0x394a6b,
+      title: 'やがて君になる', author: 'Nakatani Nio', titlePos: 'v-left' }) },
+
+  { spine: 'citrus', title: 'citrus',
+    note: 'Saburouta. Loud lemon-and-orange cover, the title in plain lowercase across the bottom.',
+    base: 0xf7dca6, ink: 0xd97a2b,
+    cover: mangaCover({ bg1: 0xf6c64a, bg2: 0xf2903c, accent: 0xffffff, ink: 0xffffff,
+      hairA: 0xd9a13f, hairB: 0x2f2f3a, clothA: 0xf7f4ee, clothB: 0x3c4a63,
+      title: 'citrus', author: 'Saburouta', titlePos: 'big', motif: 'citrus' }) },
+
+  { spine: 'ささめきこと', title: 'Sasameki Koto',
+    note: 'Whispered Words — Ikeda Takashi. Washed pale green with hand-lettered title across the top.',
+    base: 0xe2eddd, ink: 0x4b7a3f,
+    cover: mangaCover({ bg1: 0xdcecd6, bg2: 0xf2f6ec, accent: 0x8fbb7c, ink: 0x40663a,
+      hairA: 0x2e2b33, hairB: 0x6b5140, clothA: 0x53707f, clothB: 0x7d8f9c,
+      title: 'ささめきこと', author: 'Ikeda Takashi', titlePos: 'top', shortB: true }) },
+
+  { spine: 'GIRL FRIENDS', title: 'GIRL FRIENDS',
+    note: 'Morinaga Milk. Cream and rose, the two of them close together, title in a white band at the foot.',
+    base: 0xf8dde5, ink: 0xcc6a89,
+    cover: mangaCover({ bg1: 0xfbe4ea, bg2: 0xf6cdd9, accent: 0xffffff, ink: 0xc25878,
+      hairA: 0x6b4a38, hairB: 0x2c2833, clothA: 0xe8dfe6, clothB: 0xd3c3d4,
+      title: 'GIRL FRIENDS', author: 'Morinaga Milk', titlePos: 'band' }) },
+
+  { spine: '加瀬さん', title: 'Kase-san',
+    note: 'Takashima Hiromi. Sky blue with morning glories climbing all over the border.',
+    base: 0xdcefef, ink: 0x3f8a8a,
+    cover: mangaCover({ bg1: 0xcbe9f2, bg2: 0xeef8f6, accent: 0x5fa3a3, ink: 0x2f6f7a,
+      hairA: 0x3a3340, hairB: 0x8a5f3c, clothA: 0x6f9f5c, clothB: 0xe9e4d8,
+      title: '加瀬さん', author: 'Takashima Hiromi', titlePos: 'band', motif: 'flowers' }) },
+
+  { spine: '青い花', title: 'Aoi Hana',
+    note: 'Sweet Blue Flowers — Shimura Takako. Soft washed lilac and blue, title running down the right.',
+    base: 0xe5e1f2, ink: 0x6c62b0,
+    cover: mangaCover({ bg1: 0xdfe0f4, bg2: 0xf1eef8, accent: 0x8b83c4, ink: 0x5b52a0,
+      hairA: 0x2f2c3a, hairB: 0x4a3f52, clothA: 0x3f4a72, clothB: 0x59628a,
+      title: '青い花', author: 'Shimura Takako', titlePos: 'v-right' }) },
+
+  { spine: '裏世界ピクニック', title: 'Urasekai Picnic',
+    note: 'Otherside Picnic. Cold teal, a doorway standing on its own in an empty field.',
+    base: 0xd5dee6, ink: 0x2e4759,
+    cover: mangaCover({ bg1: 0x395d70, bg2: 0xa9c6cc, accent: 0x6f8f7a, ink: 0xf0f4f6,
+      hairA: 0x1f2933, hairB: 0xc8b08a, clothA: 0x2c3a47, clothB: 0x51606d,
+      title: '裏世界ピクニック', author: 'Miyazawa Iori', titlePos: 'top', motif: 'doorway' }) },
+
+  { spine: 'ЛАНДАУ', title: 'Ландау и Лифшиц',
+    note: 'Теоретическая физика. Тёмно-синий переплёт, золотое тиснение, тома в ряд.',
+    base: 0x2c4a60, ink: 0xd9c98c,
+    cover: sovietCover({ bg: 0x24405a, ink: 0xd9c98c, author: 'Л. Д. ЛАНДАУ, Е. М. ЛИФШИЦ',
+      title: 'ТЕОРЕТИЧЕСКАЯ ФИЗИКА', sub: 'Том I · Механика', publisher: 'НАУКА · МОСКВА' }) },
+
+  { spine: 'ИРОДОВ', title: 'Иродов',
+    note: 'Задачи по общей физике. Голубая обложка, корешок в трещинах от постоянного пользования.',
+    base: 0x9fc6df, ink: 0x22415c,
+    cover: sovietCover({ bg: 0xa8cde2, ink: 0x1e3a52, author: 'И. Е. ИРОДОВ',
+      title: 'ЗАДАЧИ ПО ОБЩЕЙ ФИЗИКЕ', sub: 'Издание третье', publisher: 'НАУКА · МОСКВА' }) },
+
+  { spine: 'ДЕМИДОВИЧ', title: 'Демидович',
+    note: 'Сборник задач и упражнений по математическому анализу. Зелёная, тысяча задач.',
+    base: 0x5c8a58, ink: 0xf2ecd8,
+    cover: sovietCover({ bg: 0x4f7f4c, ink: 0xf2ecd8, author: 'Б. П. ДЕМИДОВИЧ',
+      title: 'СБОРНИК ЗАДАЧ И УПРАЖНЕНИЙ ПО МАТЕМАТИЧЕСКОМУ АНАЛИЗУ', sub: '', publisher: 'НАУКА · МОСКВА' }) },
+
+  { spine: 'ФИХТЕНГОЛЬЦ', title: 'Фихтенгольц',
+    note: 'Курс дифференциального и интегрального исчисления, том II. Тёмно-красный, золотые буквы.',
+    base: 0x7c3030, ink: 0xead9b2,
+    cover: sovietCover({ bg: 0x6f2b2b, ink: 0xe8d9b2, author: 'Г. М. ФИХТЕНГОЛЬЦ',
+      title: 'КУРС ДИФФЕРЕНЦИАЛЬНОГО И ИНТЕГРАЛЬНОГО ИСЧИСЛЕНИЯ', sub: 'Том II', publisher: 'ФИЗМАТЛИТ' }) },
+
+  { spine: 'СКАНАВИ', title: 'Сканави',
+    note: 'Сборник задач по математике для поступающих во втузы. Синяя, с группами А, Б и В.',
+    base: 0x3d5fa0, ink: 0xf1f1eb,
+    cover: sovietCover({ bg: 0x37589b, ink: 0xf1f1eb, author: 'ПОД РЕД. М. И. СКАНАВИ',
+      title: 'СБОРНИК ЗАДАЧ ПО МАТЕМАТИКЕ ДЛЯ ПОСТУПАЮЩИХ ВО ВТУЗЫ', sub: '', publisher: 'ВЫСШАЯ ШКОЛА' }) },
+
+  { spine: 'САВЕЛЬЕВ', title: 'Савельев',
+    note: 'Курс общей физики. Серый коленкор, корешок в трещинах.',
+    base: 0x6a6e75, ink: 0xe1e6ec,
+    cover: sovietCover({ bg: 0x5f646c, ink: 0xe4e9ef, author: 'И. В. САВЕЛЬЕВ',
+      title: 'КУРС ОБЩЕЙ ФИЗИКИ', sub: 'Том II · Электричество', publisher: 'НАУКА · МОСКВА' }) },
+];
+
+/* textures are made once per title and shared by every copy on the
+   shelves; covers wait until a book is actually opened */
+const spineCache = new Map();
+const coverCache = new Map();
+
+function texture(draw, w, h) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function spineMat(i) {
+  if (!spineCache.has(i)) {
+    const b = BOOKS[i];
+    spineCache.set(i, new THREE.MeshToonMaterial({
+      gradientMap: toonRamp,
+      map: texture((g) => {
+        g.fillStyle = hex(b.base);
+        g.fillRect(0, 0, 64, 384);
+        g.fillStyle = hex(b.ink);
+        g.fillRect(0, 16, 64, 4);
+        g.fillRect(0, 364, 64, 4);
+        g.save();
+        g.translate(34, 192);
+        g.rotate(-Math.PI / 2);
+        g.font = `bold 24px Inter, ${JP}`;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(b.spine, 0, 0);
+        g.restore();
+      }, 64, 384),
+    }));
+  }
+  return spineCache.get(i);
+}
+
+function coverMat(i) {
+  if (!coverCache.has(i)) {
+    coverCache.set(i, new THREE.MeshToonMaterial({
+      gradientMap: toonRamp,
+      map: texture(BOOKS[i].cover, 400, 580),
+    }));
+  }
+  return coverCache.get(i);
+}
+
+function makeBook(i, hgt) {
+  const b = BOOKS[i];
+  const plain = mat(b.base);
   const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, hgt, 0.03),
-    [spine, plain, plain, plain, plain, plain]);
+    [spineMat(i), plain, plain, plain, plain, plain]);
   m.castShadow = true;
   m.receiveShadow = true;
+  m.userData.bookIndex = i;
+  hotspot(m, b.title, b.note, () => openBookCover(m));
   return m;
 }
 
-// [spine text, card title, card line, cover colour, ink colour]
-const YURI = [
-  ['やがて君になる', 'Yagate Kimi ni Naru', 'Bloom Into You — Nakatani Nio. Soft blue cover, two girls on a station platform.', 0xe4edf7, 0x5b86bd],
-  ['citrus', 'citrus', 'Saburouta. Loud orange and lemon-yellow cover.', 0xf7dca6, 0xd97a2b],
-  ['ささめきこと', 'Sasameki Koto', 'Whispered Words — Ikeda Takashi. Pale green, hand-lettered title.', 0xe2eddd, 0x6a9c5c],
-  ['GIRL FRIENDS', 'GIRL FRIENDS', 'Morinaga Milk. Cream and rose pink, two girls sharing headphones.', 0xf8dde5, 0xcc6a89],
-  ['加瀬さん', 'Kase-san', 'Takashima Hiromi. Sky blue with morning glories climbing the border.', 0xdcefef, 0x4f9a9a],
-  ['青い花', 'Aoi Hana', 'Sweet Blue Flowers — Shimura Takako. Washed lilac and pale blue.', 0xe5e1f2, 0x7f76bf],
-  ['裏世界ピクニック', 'Urasekai Picnic', 'Otherside Picnic. Cold teal, a doorway standing in an empty field.', 0xd5dee6, 0x36506a],
-];
+/* Slide the book out of the shelf and turn its cover to face you. */
+let shownBook = null;
 
-const RUS = [
-  ['ЛАНДАУ', 'Ландау и Лифшиц', 'Теоретическая физика. Тёмно-синий переплёт, золотое тиснение.', 0x2c4a60, 0xd9c98c],
-  ['ИРОДОВ', 'Иродов', 'Задачи по общей физике. Голубая обложка, потрёпанный корешок.', 0x9fc6df, 0x22415c],
-  ['ДЕМИДОВИЧ', 'Демидович', 'Сборник задач и упражнений по математическому анализу.', 0x5c8a58, 0xf2ecd8],
-  ['ФИХТЕНГОЛЬЦ', 'Фихтенгольц', 'Курс дифференциального и интегрального исчисления, том II.', 0x7c3030, 0xead9b2],
-  ['СКАНАВИ', 'Сканави', 'Сборник задач по математике для поступающих во втузы.', 0x3d5fa0, 0xf1f1eb],
-  ['САВЕЛЬЕВ', 'Савельев', 'Курс общей физики. Серый коленкор, корешок в трещинах.', 0x6a6e75, 0xe1e6ec],
-];
+function shelveBook() {
+  if (!shownBook) return;
+  const b = shownBook;
+  shownBook = null;
+  const home = b.userData.home;
+  gsap.to(b.position, { x: home.x, y: home.y, z: home.z, duration: 0.5, ease: 'power3.inOut' });
+  gsap.to(b.rotation, { y: 0, duration: 0.5, ease: 'power3.inOut' });
+  gsap.to(b.scale, { x: 1, y: 1, z: 1, duration: 0.5, ease: 'power3.inOut' });
+}
 
-const SHELF_BOOKS = YURI.concat(RUS);
+function openBookCover(b) {
+  if (shownBook === b) { shelveBook(); return; }
+  shelveBook();
+  shownBook = b;
+  b.material[4] = coverMat(b.userData.bookIndex);   // the cover, made on demand
+  const home = b.userData.home;
+  gsap.to(b.position, {
+    x: home.x + 0.34, y: home.y + 0.05, z: home.z,
+    duration: 0.7, ease: 'power3.out',
+    onUpdate: () => { if (selected === b) updateOutline(); },
+  });
+  gsap.to(b.rotation, { y: Math.PI / 2, duration: 0.7, ease: 'power3.out' });
+  gsap.to(b.scale, { x: 1.35, y: 1.35, z: 1.35, duration: 0.7, ease: 'back.out(1.4)' });
+}
 
 /* A wire that sags between two points */
 function cable(pts, color = 0x2b2b2b, r = 0.006) {
@@ -966,11 +1264,10 @@ function buildBookcase() {
   // books
   [0.76, 1.14, 1.52, 1.9].forEach((y, row) => {
     for (let i = 0; i < 11; i++) {
-      const b = SHELF_BOOKS[(i + row * 4) % SHELF_BOOKS.length];
       const hgt = 0.24 + ((i + row) % 3) * 0.03;
-      const m = makeBook(b[0], b[3], b[4], hgt);
+      const m = makeBook((i + row * 4) % BOOKS.length, hgt);
       m.position.set(-0.06, y + hgt / 2, -W / 2 + 0.08 + i * 0.07);
-      hotspot(m, b[1], b[2]);
+      m.userData.home = { x: m.position.x, y: m.position.y, z: m.position.z };
       g.add(m);
     }
   });
@@ -989,13 +1286,13 @@ function buildShelves() {
   g.add(box(D, 0.36, 0.03, C.oak, 0, 1.45, -L / 2 + 0.02, 0.8));
   g.add(box(D, 0.36, 0.03, C.oak, 0, 1.45, 0.1, 0.8));
   // stuff on the shelves, kept inside the boards
-  SHELF_BOOKS.forEach((b, i) => {
+  BOOKS.forEach((b, i) => {
     const hgt = 0.2 + (i % 3) * 0.03;
     const z = -END + 0.03 + i * 0.062;
     if (z > END - 0.03) return;
-    const m = makeBook(b[0], b[3], b[4], hgt);
+    const m = makeBook(i, hgt);
     m.position.set(-0.02, 1.295 + hgt / 2, z);
-    hotspot(m, b[1], b[2]);
+    m.userData.home = { x: m.position.x, y: m.position.y, z: m.position.z };
     g.add(m);
   });
   for (let i = 0; i < 7; i++) {
@@ -1232,6 +1529,7 @@ function select(item) {
     outline.visible = false;
     card.hidden = true;
     cardCoords.hidden = true;
+    shelveBook();
     return;
   }
   const spot = item.userData.hotspot;
