@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import { OutlineEffect } from 'three/addons/effects/OutlineEffect.js';
 import gsap from 'gsap';
 
 /* ------------------------------------------------------------------
@@ -15,26 +16,26 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 10;
+const LAYOUT_VERSION = 11;
 
 const C = {
-  wall: 0xf0ece5,
-  ceiling: 0xf6f3ee,
+  wall: 0xf4ecdf,
+  ceiling: 0xfaf5ea,
   trim: 0xfbf9f6,
-  floor: 0xcbbfa8,
-  plank: 0xc2b59c,
-  oak: 0xc9a271,       // light oak — desk, shelves, bookcase
-  oakDark: 0xa8814f,
-  brownDark: 0x5f462f, // wardrobe
+  floor: 0xd6c4a2,
+  plank: 0xc8b58f,
+  oak: 0xdcac6a,       // light oak — desk, shelves, bookcase
+  oakDark: 0xb8853f,
+  brownDark: 0x6b4a2a, // wardrobe
   chair: 0x4a2f22,     // dark chairs
   seat: 0x7c5c46,
   bedBase: 0x8a7150,
-  head: 0xa79a86,
-  blanket: 0xb9b7b4,
+  head: 0xb4a288,
+  blanket: 0xc3c7cf,
   linen: 0xf2efe9,
-  curtain: 0x8d7365,
+  curtain: 0xa37c66,
   metal: 0x9fa4a8,
-  door: 0xd9c9ab,
+  door: 0xe6d2a8,
 };
 
 /* ------------------------------------------------------------------ */
@@ -43,8 +44,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMapping = THREE.NoToneMapping;   // keep the colours flat and poster-like
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14120f);
@@ -66,13 +66,13 @@ controls.maxPolarAngle = Math.PI * 0.495;
 /* ------------------------------------------------------------------
    Light — day through the window, or the warm ceiling bulb at night
 ------------------------------------------------------------------ */
-const hemi = new THREE.HemisphereLight(0xffffff, 0x6a5c4a, 1.1);
+const hemi = new THREE.HemisphereLight(0xfff6e8, 0x7a6a52, 1.35);
 scene.add(hemi);
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+const ambient = new THREE.AmbientLight(0xfff4e4, 0.5);
 scene.add(ambient);
 
-const sun = new THREE.DirectionalLight(0xffeed6, 2.4);
+const sun = new THREE.DirectionalLight(0xfff0d2, 2.0);
 sun.position.set(-0.6, 3.4, -5.0);
 sun.target.position.set(0, 0.8, 0.5);
 sun.castShadow = true;
@@ -94,8 +94,20 @@ scene.add(bulb);
 /* ------------------------------------------------------------------
    Building blocks
 ------------------------------------------------------------------ */
-function mat(color, rough = 0.85, metal = 0) {
-  return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+/* Four hard steps of brightness instead of a smooth fade — this is what
+   gives the flat, inked look of a hand-painted anime background. */
+const toonRamp = (() => {
+  const steps = new Uint8Array([88, 152, 214, 255]);
+  const t = new THREE.DataTexture(steps, steps.length, 1, THREE.RedFormat);
+  t.minFilter = THREE.NearestFilter;
+  t.magFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.needsUpdate = true;
+  return t;
+})();
+
+function mat(color, _rough, _metal) {
+  return new THREE.MeshToonMaterial({ color, gradientMap: toonRamp });
 }
 
 function box(w, h, d, color, x = 0, y = 0, z = 0, rough) {
@@ -142,7 +154,10 @@ const shellMats = [
   mat(C.ceiling), mat(C.floor, 0.75),
   mat(C.wall), mat(C.wall),
 ];
-shellMats.forEach((m) => { m.side = THREE.BackSide; });
+shellMats.forEach((m) => {
+  m.side = THREE.BackSide;
+  m.userData.outlineParameters = { visible: false };   // no ink line round the room itself
+});
 
 const shell = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, ROOM.h, ROOM.d), shellMats);
 shell.position.y = ROOM.h / 2;
@@ -172,7 +187,7 @@ const corniceY = ROOM.h - 0.07;
 // ceiling light
 const lampDisc = new THREE.Mesh(
   new THREE.CylinderGeometry(0.16, 0.19, 0.07, 24),
-  new THREE.MeshStandardMaterial({ color: 0xfaf6ee, roughness: 0.4, emissive: 0xffd9a5, emissiveIntensity: 0 })
+  new THREE.MeshToonMaterial({ color: 0xfaf6ee, emissive: 0xffd9a5, emissiveIntensity: 0, gradientMap: toonRamp })
 );
 lampDisc.position.set(0, ROOM.h - 0.04, 0);
 scene.add(lampDisc);
@@ -181,8 +196,8 @@ scene.add(lampDisc);
    Window (north wall) + curtain
 ------------------------------------------------------------------ */
 const WIN = { x: -0.1, w: 1.0, bottom: 0.9, top: 2.15, reveal: 0.26 };
-const glassMat = new THREE.MeshStandardMaterial({
-  color: 0xcfe4f2, roughness: 0.15, emissive: 0xbdd9ec, emissiveIntensity: 0.9,
+const glassMat = new THREE.MeshToonMaterial({
+  color: 0xdcefff, emissive: 0xc4e2ff, emissiveIntensity: 1.15, gradientMap: toonRamp,
 });
 
 const windowGroup = new THREE.Group();
@@ -325,6 +340,7 @@ const closetGroup = new THREE.Group();
     new THREE.PlaneGeometry(W / 2 - 0.05, H - 0.1),
     { color: 0xb6bec4, textureWidth: 1024, textureHeight: 1024 }
   );
+  mirror.material.userData.outlineParameters = { visible: false };
   mirror.position.set(CX + W / 4, H / 2, zf - 0.008);
   mirror.rotation.y = Math.PI;
   closetGroup.add(mirror);
@@ -378,7 +394,7 @@ function poster(draw, w, h, x, y, z, normal, res = 240) {
   draw(c.getContext('2d'), c.width, c.height);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshToonMaterial({ map: tex, gradientMap: toonRamp }));
   m.position.set(x, y, z);
   if (normal === N_EAST) m.rotation.y = -Math.PI / 2;
   else if (normal === N_WEST) m.rotation.y = Math.PI / 2;
@@ -631,7 +647,7 @@ function buildDesk() {
     x.beginPath(); x.arc(106, 100, 9, 0, 7); x.fill();
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
-    return new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 });
+    return new THREE.MeshToonMaterial({ map: t, gradientMap: toonRamp });
   })());
   /* you're right-handed, and you face -x — so your right hand is -z */
   pad.rotation.x = -Math.PI / 2;
@@ -653,7 +669,7 @@ function buildDesk() {
   /* half-drunk Pepsi Zero — you can see where the drink stops */
   g.add(cyl(0.035, 0.1, 0x141922, -0.16, TOP + 0.05, 0.6, 0.25, 0.1));
   const empty = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.1, 18),
-    new THREE.MeshStandardMaterial({ color: 0xdfe6ea, roughness: 0.1, transparent: true, opacity: 0.4 }));
+    new THREE.MeshToonMaterial({ color: 0xdfe6ea, transparent: true, opacity: 0.4, gradientMap: toonRamp }));
   empty.position.set(-0.16, TOP + 0.15, 0.6);
   g.add(empty);
   g.add(cyl(0.014, 0.04, 0x1b4fa0, -0.16, TOP + 0.22, 0.6, 0.4));
@@ -1177,14 +1193,14 @@ function setNight(on) {
   night = on;
   btnLight.textContent = on ? 'Day' : 'Night';
   const d = 1.1;
-  gsap.to(sun, { intensity: on ? 0.06 : 2.4, duration: d });
-  gsap.to(hemi, { intensity: on ? 0.28 : 1.1, duration: d });
-  gsap.to(ambient, { intensity: on ? 0.12 : 0.35, duration: d });
+  gsap.to(sun, { intensity: on ? 0.06 : 2.0, duration: d });
+  gsap.to(hemi, { intensity: on ? 0.3 : 1.35, duration: d });
+  gsap.to(ambient, { intensity: on ? 0.16 : 0.5, duration: d });
   gsap.to(skyFill, { intensity: on ? 0.6 : 6, duration: d });
   gsap.to(bulb, { intensity: on ? 14 : 0, duration: d });
   gsap.to(lampDisc.material, { emissiveIntensity: on ? 1.4 : 0, duration: d });
   gsap.to(glassMat.color, { r: on ? 0.09 : 0.81, g: on ? 0.11 : 0.89, b: on ? 0.18 : 0.95, duration: d });
-  gsap.to(glassMat, { emissiveIntensity: on ? 0.12 : 0.9, duration: d });
+  gsap.to(glassMat, { emissiveIntensity: on ? 0.12 : 1.15, duration: d });
   gsap.to(scene.background, { r: on ? 0.04 : 0.08, g: on ? 0.04 : 0.07, b: on ? 0.05 : 0.06, duration: d });
 }
 
@@ -1252,11 +1268,31 @@ function hideNearWallDecor() {
   }
 }
 
+/* Inked outlines, drawn by pushing a slightly larger black copy of each
+   shape out behind it. If the browser trips over it we quietly fall back
+   to plain rendering rather than showing a broken page. */
+const outlineFx = new OutlineEffect(renderer, {
+  defaultThickness: 0.0032,
+  defaultColor: [0.09, 0.07, 0.10],
+  defaultAlpha: 0.85,
+  defaultKeepAlive: true,
+});
+let inked = true;
+
 renderer.setAnimationLoop(() => {
   controls.update();
   hideNearWallDecor();
   if (planMode) {
     for (const l of labels) l.spr.position.set(l.anchor.x, 2.5, l.anchor.z);
+  }
+  if (inked) {
+    try {
+      outlineFx.render(scene, camera);
+      return;
+    } catch (err) {
+      console.warn('outlines off:', err);
+      inked = false;
+    }
   }
   renderer.render(scene, camera);
 });
