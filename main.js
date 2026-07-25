@@ -15,7 +15,7 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 8;
+const LAYOUT_VERSION = 9;
 
 const C = {
   wall: 0xf0ece5,
@@ -838,7 +838,7 @@ const chair = addItem('Desk chair', 'Dark wood with the tall slatted back, pulle
   buildChair, -HW + 0.95, -0.39, -Math.PI / 2);
 
 const bass = addItem('Bass guitar', 'In its black gig bag, standing in the gap between the end of the desk and the window wall.',
-  buildBass, -HW + 0.1, -1.5);
+  buildBass, -1.55, -HD + 0.1, -Math.PI / 2);
 
 items.forEach((i) => { i.userData.half = halfSize(i); });
 
