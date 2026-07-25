@@ -15,7 +15,7 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 5;
+const LAYOUT_VERSION = 6;
 
 const C = {
   wall: 0xf0ece5,
@@ -524,7 +524,7 @@ poster((g, w, h) => {
     g.lineWidth = 1;
     g.beginPath(); g.moveTo(20, top + 16); g.lineTo(w - 20, top + 16); g.stroke();
   });
-}, 0.62, 0.4, -HW + 0.02, 1.02, -0.5, N_WEST, 900);
+}, 0.62, 0.4, -HW + 0.02, 1.02, -0.65, N_WEST, 900);
 
 /* ------------------------------------------------------------------
    Furniture you can pick up and move
