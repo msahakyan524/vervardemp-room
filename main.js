@@ -683,6 +683,16 @@ const CHORALE = ('G4 A4 B4 D5 C5 B4 G4 A4 B4 A4 G4 A4 B4 D5 G5 Fs5 E5 D5 '
 let audioCtx = null;
 let stopMusic = null;
 
+/* Chords under the melody — a chorale is built on harmony, and a bare
+   single line is most of why it sounded odd. */
+const CHORD = {
+  G: [196.00, 246.94, 293.66],
+  Em: [164.81, 196.00, 246.94],
+  C: [130.81, 164.81, 196.00],
+  D: [146.83, 185.00, 220.00],
+};
+const BARS = ['G', 'Em', 'C', 'D', 'G', 'C', 'D'];
+
 function playChorale() {
   if (stopMusic) stopMusic();
   audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -690,30 +700,56 @@ function playChorale() {
   if (ctx.state === 'suspended') ctx.resume();
 
   const master = ctx.createGain();
-  master.gain.value = 0.14;
+  master.gain.value = 0.5;
   master.connect(ctx.destination);
 
-  const beat = 0.34;
-  const t0 = ctx.currentTime + 0.08;
+  const tone = ctx.createBiquadFilter();      // take the buzz off the top
+  tone.type = 'lowpass';
+  tone.frequency.value = 2300;
+  tone.connect(master);
+
+  const echo = ctx.createDelay(1.0);          // a little room around it
+  echo.delayTime.value = 0.26;
+  const echoLevel = ctx.createGain();
+  echoLevel.gain.value = 0.2;
+  tone.connect(echo);
+  echo.connect(echoLevel);
+  echoLevel.connect(echo);
+  echoLevel.connect(master);
+
+  const step = 0.2;                           // flowing, not one plod per beat
+  const t0 = ctx.currentTime + 0.1;
   const started = [];
+
+  const voice = (freq, at, dur, level, type, detune) => {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    if (detune && osc.detune) osc.detune.value = detune;
+    env.gain.setValueAtTime(0.0001, at);
+    env.gain.linearRampToValueAtTime(level, at + 0.03);
+    env.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    osc.connect(env);
+    env.connect(tone);
+    osc.start(at);
+    osc.stop(at + dur + 0.05);
+    started.push(osc);
+  };
+
   CHORALE.forEach((n, i) => {
     const f = NOTE[n];
     if (!f) return;
-    [[f, 0.9, 'triangle'], [f / 2, 0.3, 'sine']].forEach(([freq, level, type]) => {
-      const osc = ctx.createOscillator();
-      const env = ctx.createGain();
-      osc.type = type;
-      osc.frequency.value = freq;
-      const at = t0 + i * beat;
-      env.gain.setValueAtTime(0.0001, at);
-      env.gain.linearRampToValueAtTime(level, at + 0.05);
-      env.gain.exponentialRampToValueAtTime(0.0001, at + beat * 1.4);
-      osc.connect(env);
-      env.connect(master);
-      osc.start(at);
-      osc.stop(at + beat * 1.5);
-      started.push(osc);
-    });
+    const at = t0 + i * step;
+    const endOfBar = i % 6 === 5;             // let it breathe every six notes
+    const dur = step * (endOfBar ? 1.9 : 1.45);
+    voice(f, at, dur, 0.30, 'sine');
+    voice(f, at, dur, 0.09, 'triangle', 6);   // a touch of edge, slightly detuned
+  });
+
+  BARS.forEach((name, b) => {
+    const at = t0 + b * 6 * step;
+    CHORD[name].forEach((f) => voice(f, at, step * 6.2, 0.06, 'sine'));
   });
 
   stopMusic = () => {
@@ -721,7 +757,7 @@ function playChorale() {
     try { master.disconnect(); } catch (_) {}
     stopMusic = null;
   };
-  return CHORALE.length * beat;
+  return CHORALE.length * step;
 }
 
 /* Book spines, printed with the title. Colours follow each cover's
@@ -995,7 +1031,7 @@ function buildShelves() {
   }
   saya.position.set(0.02, 1.278, 0.62);
   saya.rotation.y = -Math.PI / 2;
-  hotspot(saya, 'Saya', "trust me you don't wanna know");
+  hotspot(saya, 'Figure', "trust me you don't wanna know");
   g.add(saya);
 
   /* medicine on the first shelf */
@@ -1069,7 +1105,7 @@ const desk = addItem('Desk', 'Light oak, pushed up towards the window. Laptop fa
 const bookcase = addItem('Bookcase', 'Tall oak bookcase — manga, folders and medals, cupboards at the bottom.',
   buildBookcase, -HW + 0.23, 0.95);
 
-const shelves = addItem('Wall shelves', 'Three long boards above the desk: books, medicine, the Saya figure, dried flowers on top.',
+const shelves = addItem('Wall shelves', 'Three long boards above the desk: books, medicine, dried flowers on top.',
   buildShelves, -HW + 0.14, -0.42);
 
 const chair = addItem('Desk chair', 'Dark wood with the tall slatted back, pulled up to the desk facing the laptop.',
