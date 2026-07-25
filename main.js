@@ -15,7 +15,7 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 9;
+const LAYOUT_VERSION = 10;
 
 const C = {
   wall: 0xf0ece5,
@@ -282,13 +282,25 @@ onWall(doorGroup, N_SOUTH, new THREE.Vector3(0, 0, HD));
    from the door so each sits on the wall on its own */
 const switchPlate = new THREE.Group();
 {
-  switchPlate.add(box(0.086, 0.086, 0.014, 0xf3f0ea, 0.22, 0.92, HD - 0.02, 0.7));
-  switchPlate.add(box(0.05, 0.05, 0.008, 0xe4e0d8, 0.22, 0.92, HD - 0.028, 0.7));
-  switchPlate.add(box(0.086, 0.086, 0.014, 0xf3f0ea, 0.36, 0.92, HD - 0.02, 0.7));
-  [-0.017, 0.017].forEach((dx) => {
-    const hole = cyl(0.008, 0.01, 0x2c2924, 0.36 + dx, 0.92, HD - 0.028, 0.8, 0);
-    hole.rotation.x = Math.PI / 2;
-    switchPlate.add(hole);
+  const SX = -0.60, KX = -0.46, SY = 0.92;   // just past the door frame
+  const face = 0xfaf8f4, inner = 0xecE8e0;
+
+  // slim square plate with a recessed rocker
+  switchPlate.add(box(0.082, 0.082, 0.008, face, SX, SY, HD - 0.014, 0.45));
+  switchPlate.add(box(0.066, 0.066, 0.004, inner, SX, SY, HD - 0.019, 0.5));
+  const rocker = box(0.044, 0.054, 0.007, 0xffffff, SX, SY, HD - 0.023, 0.3);
+  rocker.rotation.x = 0.06;
+  switchPlate.add(rocker);
+
+  // matching socket with a round dished face
+  switchPlate.add(box(0.082, 0.082, 0.008, face, KX, SY, HD - 0.014, 0.45));
+  const dish = cyl(0.031, 0.005, inner, KX, SY, HD - 0.019, 0.5, 0);
+  dish.rotation.x = Math.PI / 2;
+  switchPlate.add(dish);
+  [-0.0125, 0.0125].forEach((dx) => {
+    const pin = cyl(0.0065, 0.008, 0x2a2724, KX + dx, SY, HD - 0.023, 0.8, 0);
+    pin.rotation.x = Math.PI / 2;
+    switchPlate.add(pin);
   });
 }
 switchPlate.name = 'switch';
