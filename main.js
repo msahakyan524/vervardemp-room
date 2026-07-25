@@ -15,7 +15,7 @@ const STORE_KEY = 'room-layout';
 /* Bump this whenever the built-in layout changes. Anything saved under an
    older number is thrown away, so a browser that remembers where you once
    dragged the desk can never hide a newer version of the room. */
-const LAYOUT_VERSION = 6;
+const LAYOUT_VERSION = 7;
 
 const C = {
   wall: 0xf0ece5,
@@ -524,7 +524,7 @@ poster((g, w, h) => {
     g.lineWidth = 1;
     g.beginPath(); g.moveTo(20, top + 16); g.lineTo(w - 20, top + 16); g.stroke();
   });
-}, 0.62, 0.4, -HW + 0.02, 1.02, -0.65, N_WEST, 900);
+}, 0.62, 0.4, -HW + 0.02, 1.02, -0.8, N_WEST, 900);
 
 /* ------------------------------------------------------------------
    Furniture you can pick up and move
@@ -805,18 +805,18 @@ function buildBass() {
   const g = new THREE.Group();
   const lean = new THREE.Group();
   const shell = 0x131315;
-  lean.add(box(0.13, 1.0, 0.30, shell, 0, 0.62, 0, 0.8));            // body of the bag
-  const bout = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.13, 20), mat(shell, 0.8));
+  lean.add(box(0.13, 0.84, 0.28, shell, 0, 0.54, 0, 0.8));           // body of the bag
+  const bout = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.13, 20), mat(shell, 0.8));
   bout.rotation.z = Math.PI / 2;
-  bout.position.y = 0.18;
+  bout.position.y = 0.17;
   bout.castShadow = true;
   lean.add(bout);
-  lean.add(box(0.115, 0.26, 0.17, shell, 0, 1.16, 0, 0.8));           // neck end
-  lean.add(box(0.10, 0.13, 0.20, shell, 0, 1.31, 0, 0.8));            // headstock bulge
-  lean.add(box(0.035, 0.02, 0.17, 0x3d3d40, 0.07, 0.72, 0, 0.6));     // carry handle
-  lean.add(box(0.008, 1.15, 0.012, 0x767a80, 0.066, 0.66, 0, 0.45));  // zip
-  lean.add(box(0.09, 0.05, 0.03, 0x2c2c30, 0.02, 0.9, 0.14, 0.7));    // side pocket buckle
-  lean.rotation.z = 0.1;                                              // tipped back on the wall
+  lean.add(box(0.115, 0.22, 0.17, shell, 0, 1.02, 0, 0.8));           // neck end
+  lean.add(box(0.10, 0.12, 0.19, shell, 0, 1.14, 0, 0.8));            // headstock bulge
+  lean.add(box(0.035, 0.02, 0.17, 0x3d3d40, 0.07, 0.64, 0, 0.6));     // carry handle
+  lean.add(box(0.008, 1.0, 0.012, 0x767a80, 0.066, 0.58, 0, 0.45));   // zip
+  lean.add(box(0.09, 0.05, 0.03, 0x2c2c30, 0.02, 0.8, 0.13, 0.7));    // side pocket buckle
+  lean.rotation.z = 0.04;        // barely tipped, so it fits the narrow gap
   g.add(lean);
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return g;
@@ -826,7 +826,7 @@ const bed = addItem('Bed', 'Head against the window wall, running down the right
   buildBed, HW - 0.68, -HD + 1.14);
 
 const desk = addItem('Desk', 'Light oak, pushed up towards the window. Laptop facing the chair, fan and charger plugged in.',
-  buildDesk, -HW + 0.3, -0.8);
+  buildDesk, -HW + 0.56, -0.8);
 
 const bookcase = addItem('Bookcase', 'Tall oak bookcase — manga, folders and medals, cupboards at the bottom.',
   buildBookcase, -HW + 0.23, 0.95);
@@ -835,10 +835,10 @@ const shelves = addItem('Wall shelves', 'Three long boards above the desk: books
   buildShelves, -HW + 0.14, -0.85);
 
 const chair = addItem('Desk chair', 'Dark wood with the tall slatted back, pulled up to the desk facing the laptop.',
-  buildChair, -HW + 0.95, -0.8, -Math.PI / 2);
+  buildChair, -HW + 1.22, -0.8, -Math.PI / 2);
 
-const bass = addItem('Bass guitar', 'In its black gig bag, stood in the corner between the end of the desk and the window wall.',
-  buildBass, -0.92, -HD + 0.19, -Math.PI / 2);
+const bass = addItem('Bass guitar', 'In its black gig bag, slotted into the gap between the back of the desk and the wall.',
+  buildBass, -HW + 0.13, -1.28);
 
 items.forEach((i) => { i.userData.half = halfSize(i); });
 
